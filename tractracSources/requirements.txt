@@ -1,0 +1,6 @@
+h5py
+imutils
+opencv-python
+matplotlib
+parse
+scipy
