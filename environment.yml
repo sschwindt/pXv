@@ -1,0 +1,22 @@
+name: pxv-env
+channels: [conda-forge]
+dependencies:
+  - python=3.12
+  - numpy
+  - scipy
+  - matplotlib
+  - pyyaml
+  - pyproj
+  - rasterio
+  - geopandas
+  - shapely
+  - fiona
+  - netcdf4
+  - xarray
+  - pyside6
+  - pyqtgraph
+  - optuna
+  - scikit-image
+  - pip
+  - pip:
+      - opencv-python-headless

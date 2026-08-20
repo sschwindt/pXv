@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# pXv
+tractrac-env/
+*~
+*-out/
+.pxv-cache/

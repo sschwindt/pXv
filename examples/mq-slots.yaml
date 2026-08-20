@@ -1,0 +1,88 @@
+name: MQ-slots
+video:
+  path: tractracSources/ssc-samples/MQ-slots.mp4
+  start: 300
+  stop: 500
+  step: 2
+  fps: 30.0
+  # crop the letterbox bars and the flume rails; x then y
+  roi: [30, 460, 1050, 1350]
+preprocess:
+  grayscale: true
+  background: static      # reference workflow: mean of every Nth frame, subtracted
+  bg_stride: 10
+  bg_speed: 0.02
+  normalize: true
+  clahe: true
+  clahe_clip: 2.0
+  clahe_grid: 8
+  median: 0
+  invert: false
+stabilize:
+  enabled: false          # a flume fills the frame; nothing static to register against
+  model: none
+  max_features: 2000
+  quality: 0.01
+  min_distance: 12
+  ransac_thresh: 3.0
+  keyframe_interval: 30
+  static_mask: []
+  water_mask: []
+geometry:
+  mode: known_distance
+  epsg: 0                 # local coordinates; a flume has no CRS
+  # ASSUMPTION, confirm before trusting any velocity: the cropped frame spans the
+  # 0.5 m flume width. Everything scales linearly with this number.
+  known_p1: [0.0, 445.0]
+  known_p2: [1020.0, 445.0]
+  known_length_m: 0.5
+  height_m: 0.0
+  water_offset_m: 0.0
+  hfov_deg: 0.0
+  gcp_image: []
+  gcp_world: []
+  orthophoto: ''
+  scale_correction: 1.0
+piv:
+  enabled: true
+  windows: [128, 64]
+  overlap: 0.5
+  # the reference workflow's 0.7 assumes seeded particles; this clip is unseeded
+  # water over a visible bed, so the correlation never reaches that level
+  corr_threshold: 0.5
+  snr_method: peak2rms
+  snr_exclusion_px: 5
+  snr_threshold: 3.0
+  subpixel: gaussian
+  min_texture: 0.02
+  median_threshold: 2.0
+  fill: true
+ptv:
+  enabled: true
+  conv_size: 2.0
+  peak_threshold: 0.02
+  auto_threshold: true
+  peak_neighbourhood: 1
+  motion_neighbours: 10
+  filter_std: 1.5
+  max_displacement: 0.0
+  piv_guided: true
+grid:
+  cell_px: 32
+  min_samples: 5
+groundtruth:
+  path: ''
+calibrate:
+  enabled: false
+export:
+  outdir: examples/mq-slots-out
+  geotiff: true
+  gpkg: true
+  ugrid: true
+  streamlines: true
+  cmap: cividis
+  backdrop_alpha: 0.5
+  dpi: 180
+  discharge_m3s: 0.06     # MQ = 60 L/s
+  check_depth_m: 0.0      # unknown, so the check inverts for an implied depth
+  alpha: 0.85
