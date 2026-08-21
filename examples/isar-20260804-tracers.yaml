@@ -1,0 +1,143 @@
+name: isar-20260804-tracers
+video:
+  path: examples/isar-20260804/DJI_20260804150234_0002_D.MP4
+  # the tracer pulse: a blob census over the whole clip puts it at frames
+  # 1200-1700, peaking 1300-1600 at 10-13 tracers per frame over the water
+  start: 1200
+  stop: 1700
+  step: 2            # dt = 67 ms, so ~4 px at 1.5 m/s and 25 mm/px
+  secondary_path: examples/isar-20260804/DJI_20260804150234_0002_F.MP4
+  fps: 0.0           # read from the container
+  roi: []
+preprocess:
+  grayscale: true
+  background: static
+  bg_stride: 10
+  bg_window: 15
+  bg_speed: 0.02
+  normalize: true
+  clahe: true
+  clahe_clip: 2.0
+  clahe_grid: 8
+  median: 0
+  invert: false
+stabilize:
+  enabled: true
+  model: similarity
+  max_features: 2000
+  quality: 0.01
+  min_distance: 12
+  ransac_thresh: 3.0
+  keyframe_interval: 30
+  # features are taken from the dry bars only; the water is not rigid
+  static_mask:
+    - [[1160, 0], [1919, 0], [1919, 440], [1160, 415], [990, 295], [810, 145], [630, 0]]
+    - [[0, 640], [240, 540], [460, 470], [650, 445], [820, 585], [910, 730], [1020, 820],
+       [1010, 1079], [0, 1079]]
+  water_mask: []
+geometry:
+  # a locked gimbal is not a nadir gimbal: this flight sits 11.6 deg off nadir,
+  # so the ground sampling distance varies ~17% across the frame and a single
+  # scale factor would be wrong. Everything here comes from the DJI .SRT.
+  mode: camera
+  epsg: 25832        # UTM zone 32N
+  height_m: 0.0      # 0 means "use rel_alt from the SRT"
+  water_offset_m: 0.0
+  yaw_deg: 0.0       # 0 means "use gb_yaw from the SRT"
+  pitch_deg: 0.0     # 0 means "use gb_pitch from the SRT"
+  roll_deg: 0.0
+  focal_len_35mm: 0.0
+  origin_xy: []
+  known_p1: []
+  known_p2: []
+  known_length_m: 0.0
+  hfov_deg: 0.0
+  gcp_image: []
+  gcp_world: []
+  orthophoto: ''
+  scale_correction: 1.0
+piv:
+  enabled: true
+  windows: [128, 64]
+  overlap: 0.5
+  corr_threshold: 0.5
+  snr_method: peak2rms
+  snr_exclusion_px: 5
+  snr_threshold: 3.0
+  subpixel: gaussian
+  min_texture: 0.02
+  median_threshold: 2.0
+  fill: true
+ptv:
+  enabled: true
+  # injected tracers are far brighter than anything else on the water and have a
+  # known size, so brightness and area beat a band-pass, which also fires on sun
+  # glint and on the bed seen through clear water
+  detector: bright
+  use_raw: true      # the PIV contrast stretch pushes noise to saturation
+  bright_threshold: 0.86
+  min_area_px: 20
+  max_area_px: 400
+  conv_size: 2.0
+  peak_threshold: 0.02
+  auto_threshold: true
+  peak_neighbourhood: 1
+  motion_neighbours: 8
+  filter_std: 2.0
+  max_displacement: 20.0
+  piv_guided: true   # the PIV field seeds the tracer motion model
+analysis:
+  # drawn by hand: automatic water detection is unreliable on a sunlit gravel bar,
+  # where water and bar overlap in both brightness and colour
+  include:
+    - [[0, 0], [620, 0], [800, 150], [980, 300], [1150, 425], [1919, 455],
+       [1919, 800], [1010, 800], [880, 700], [800, 560], [640, 430], [430, 455],
+       [200, 520], [0, 600]]
+    - [[575, 1045], [640, 880], [760, 818], [880, 858], [925, 960], [885, 1055]]
+  exclude: []
+grid:
+  cell_px: 48
+  min_samples: 2
+groundtruth:
+  path: examples/isar-20260804/IsarAug2026.gpkg
+  layer: ft_tke_points
+  col_u: v_x_m_s
+  col_v: v_y_m_s
+  col_speed: ''          # derived from the components
+  col_depth: Total_Depth_m
+  col_z_over_h: ''
+  col_sigma: ''
+  col_vertical: ''
+  col_meas_depth: Meas_Depth_m
+  col_total_depth: Total_Depth_m
+  depth_convention: below_surface   # 0.2 / 0.6 / 0.8 are depths below the surface
+  sigma_rel: 0.05                   # ADV working uncertainty
+  sigma_floor_ms: 0.0025
+  vertical_from_geometry: true
+  vertical_tolerance_m: 0.10
+  search_radius_m: 1.5
+  conversion: hybrid
+  z0_fallback_m: 0.02
+  min_submergence: 5.0
+calibrate:
+  enabled: false
+  fit_scale: true
+  n_trials: 24
+  holdout_fraction: 0.3
+  seed: 0
+  w_magnitude: 1.0
+  w_direction: 0.5
+  w_yield: 0.25
+  params: [piv.windows, piv.overlap, piv.corr_threshold, video.step]
+export:
+  outdir: examples/isar-20260804-tracers-out
+  geotiff: true
+  gpkg: true
+  ugrid: true
+  streamlines: true
+  cmap: cividis
+  backdrop_alpha: 0.5
+  dpi: 180
+  discharge_m3s: 0.0
+  check_depth_m: 0.0
+  alpha: 0.85

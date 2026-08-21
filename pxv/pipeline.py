@@ -173,15 +173,20 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
     else:
         proc = np.stack([preprocess_frame(f, pcfg, background) for f in raw])
 
+    # PIV and PTV want different preprocessing, so keep both.
+    ptv_frames = (raw.astype(np.float32) / 255.0) if project.ptv.use_raw else proc
+
     amask = analysis_mask(proc.shape[1:], project.analysis.include, project.analysis.exclude)
     if amask is not None:
         _log(log, f"analysis mask covers {amask.mean():.0%} of the frame", verbose)
         proc = proc * amask[None, :, :].astype(np.float32)
+    else:
+        amask = None
     timings["preprocess"] = time.time() - t0
 
     # ---- seeding diagnostic ---------------------------------------------
     window = list(project.piv.windows)[-1]
-    n_det = float(np.mean([len(detect(proc[i], project.ptv)) for i in
+    n_det = float(np.mean([len(detect(ptv_frames[i], project.ptv, amask)) for i in
                            range(0, len(proc), max(1, len(proc) // 5))]))
     density = fuse_mod.seeding_density(n_det, proc.shape[1:], window)
     engine, note = fuse_mod.recommend_engine(density)
@@ -205,7 +210,8 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
     tracks: Tracks | None = None
     if project.ptv.enabled:
         seed = piv_fields[0] if (piv_fields and project.ptv.piv_guided) else None
-        tracks = run_ptv(proc, project.ptv, piv_seed=seed, progress=progress)
+        tracks = run_ptv(ptv_frames, project.ptv, piv_seed=seed, mask=amask,
+                         progress=progress)
         _log(log, f"PTV: {tracks.n} vectors from {len(proc) - 1} frame pairs"
                   + (" (PIV-guided)" if seed is not None else ""), verbose)
     timings["ptv"] = time.time() - t0

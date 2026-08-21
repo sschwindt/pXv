@@ -96,8 +96,30 @@ def _subpixel_2nd(conv: np.ndarray, ys: np.ndarray, xs: np.ndarray) -> tuple[np.
     return dx, dy
 
 
-def detect(img: np.ndarray, cfg: PTVCfg) -> np.ndarray:
+def detect_bright(img: np.ndarray, cfg: PTVCfg, mask: np.ndarray | None = None) -> np.ndarray:
+    """Detect bright compact objects by absolute brightness and area.
+
+    Injected tracers on a water surface are far brighter than anything else in the
+    scene and have a known physical size, so thresholding on brightness and
+    filtering on area is both simpler and more selective than a band-pass, which
+    also responds to sun glint and to the bed seen through clear water.
+    """
+    work = np.clip(img, 0.0, 1.0)
+    binary = (work > float(cfg.bright_threshold)).astype(np.uint8)
+    if mask is not None:
+        binary &= mask.astype(np.uint8)
+    n, _, stats, centroids = cv2.connectedComponentsWithStats(binary, 8)
+    lo, hi = float(cfg.min_area_px), float(cfg.max_area_px)
+    keep = [i for i in range(1, n) if lo <= stats[i, cv2.CC_STAT_AREA] <= hi]
+    if not keep:
+        return np.zeros((0, 2), np.float32)
+    return np.asarray([centroids[i] for i in keep], dtype=np.float32)
+
+
+def detect(img: np.ndarray, cfg: PTVCfg, mask: np.ndarray | None = None) -> np.ndarray:
     """Detect objects. Returns an ``(n, 2)`` array of sub-pixel ``(x, y)``."""
+    if cfg.detector == "bright":
+        return detect_bright(img, cfg, mask)
     conv = difference_of_gaussian(img, cfg.conv_size)
     thresh = auto_threshold(conv) if cfg.auto_threshold else float(cfg.peak_threshold)
     k = 2 * int(max(1, cfg.peak_neighbourhood)) + 1
@@ -107,7 +129,12 @@ def detect(img: np.ndarray, cfg: PTVCfg) -> np.ndarray:
     if len(xs) == 0:
         return np.zeros((0, 2), np.float32)
     dx, dy = _subpixel_2nd(conv, ys, xs)
-    return np.column_stack([xs + dx, ys + dy]).astype(np.float32)
+    pts = np.column_stack([xs + dx, ys + dy]).astype(np.float32)
+    if mask is not None and len(pts):
+        ok = mask[np.clip(pts[:, 1].astype(int), 0, mask.shape[0] - 1),
+                  np.clip(pts[:, 0].astype(int), 0, mask.shape[1] - 1)]
+        pts = pts[ok.astype(bool)]
+    return pts
 
 
 class MotionModel:
@@ -197,6 +224,7 @@ def run_ptv(
     frames: np.ndarray,
     cfg: PTVCfg,
     piv_seed=None,
+    mask: np.ndarray | None = None,
     progress=None,
 ) -> Tracks:
     """Track across a preprocessed frame stack. Displacements are px per interval."""
@@ -209,9 +237,9 @@ def run_ptv(
     if max_disp <= 0:
         max_disp = max(8.0, 0.05 * min(frames.shape[1], frames.shape[2]))
 
-    prev_pts = detect(frames[0], cfg)
+    prev_pts = detect(frames[0], cfg, mask)
     for i in range(1, len(frames)):
-        next_pts = detect(frames[i], cfg)
+        next_pts = detect(frames[i], cfg, mask)
         src, disp, err = track_pair(prev_pts, next_pts, model, cfg, max_disp)
         if len(src):
             tracks.add(src[:, 0], src[:, 1], disp[:, 0], disp[:, 1], err)

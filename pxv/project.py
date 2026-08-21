@@ -17,6 +17,9 @@ import yaml
 @dataclass
 class VideoCfg:
     path: str = ""
+    #: optional second camera stream showing the same scene, e.g. multispectral.
+    #: Co-registered onto the primary frame before use.
+    secondary_path: str = ""
     #: first frame index to process
     start: int = 0
     #: last frame index, exclusive; ``-1`` means end of file
@@ -135,6 +138,17 @@ class PIVCfg:
 @dataclass
 class PTVCfg:
     enabled: bool = False
+    #: "dog" is a band-pass suited to natural texture; "bright" thresholds on
+    #: absolute brightness and area, which is what injected tracers need
+    detector: Literal["dog", "bright"] = "dog"
+    #: work on the raw radiometry rather than the PIV-preprocessed image. PIV wants
+    #: the background removed and the contrast stretched; a bright-tracer detector
+    #: wants neither, because the stretch pushes noise to saturation.
+    use_raw: bool = True
+    #: "bright" detector: threshold on the image, 0 to 1
+    bright_threshold: float = 0.86
+    min_area_px: int = 8
+    max_area_px: int = 600
     #: difference-of-Gaussian kernel scale; roughly the particle radius in pixels
     conv_size: float = 2.0
     #: 0 to 1; automatic threshold when ``auto_threshold`` is set
