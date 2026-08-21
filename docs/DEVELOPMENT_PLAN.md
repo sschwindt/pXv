@@ -1078,7 +1078,75 @@ scale factor cannot rotate anything. The ADV bearings themselves spread from abo
 braided channel will differ. It is not a convention error, since both sides are
 easting and northing components, but it is not fully explained either.
 
-### 13.7 What would raise coverage
+### 13.7 Following the four-step chain, and where it applies
+
+The chain in `README.md` runs as four ordered stages, and each is now separately
+switchable and separately reported. A run logs what every stage did to the
+quantities a correlator cares about:
+
+```
+preprocess 0 input                 contrast 180.0000  texture 19.1484  saturated  0.1%
+preprocess 1 background (static)   contrast  61.5400  texture  9.8525  saturated  0.0%
+preprocess 2 normalize (1-99 pct)  contrast   1.0000  texture  0.1434  saturated  2.0%
+preprocess 3 CLAHE (clip 2)        contrast   0.9922  texture  0.2126  saturated  1.0%
+```
+
+Background subtraction halves the texture, which is the bed being removed. CLAHE
+then puts 48 % of it back as fine structure and halves the saturated fraction,
+which is the point of the stage.
+
+**The chain is right for PIV and wrong for tracer PTV, and the numbers say so.**
+Detection contrast between seeded frames and quiet frames, measured on the Isar
+clip:
+
+| Chain | tracers/frame | false/frame | contrast |
+|---|---|---|---|
+| raw radiometry | 9.8 | 0.3 | **33x** |
+| background subtracted, normalized 1-99 | 226.6 | 201.4 | 1.1x |
+| background subtracted, normalized 0.05-99.95 | 10.1 | 4.0 | 2.5x |
+| that plus CLAHE | 115.8 | 136.3 | 0.8x |
+| that plus unsharp | 132.7 | 183.7 | 0.7x |
+
+CLAHE and unsharp invert the discrimination: more false detections in quiet frames
+than tracers in seeded ones. The reason is structural rather than a tuning
+failure. The chain exists to amplify faint texture so that correlation can lock
+onto it; injected tracers are the opposite case, the brightest thing in the frame,
+and amplifying faint texture destroys the contrast that identifies them.
+
+So the pipeline runs the four stages for PIV and lets PTV bypass them through
+`ptv.use_raw`. The stage report makes that visible instead of asserting it.
+
+### 13.8 Correlation averaging makes this clip worse, not better
+
+Ensemble correlation, averaging the correlation planes over many frame pairs, is
+the standard remedy for sparse seeding, and it was already implemented. On this
+clip it fails for a specific reason worth recording: averaging reinforces whatever
+is *consistent* across pairs, and here that is the stationary bed. Yield rose from
+43 % to 44 % while the median displacement stayed at 0.55 px, which is the bed.
+Ensemble correlation helps when tracers are the only signal; it hurts when a
+static pattern competes with them.
+
+### 13.9 Why four streamlines became thirty
+
+The velocimetry was not the problem. A tracer pulse leaves vectors along the paths
+the tracers took, so binning gives isolated cells, and a streamline that cannot
+step from one cell to the next stops immediately. 99 measured cells rendered as a
+handful of stubs.
+
+`grid.interpolate_radius_px` fills cells within a bounded distance of a measured
+one by inverse distance weighting: 99 measured cells become 272 rendered. The
+filled cells are tagged `SOURCE_INTERP`, carry a zero sample count, are excluded
+from the static-motion check and from every statistic, and are exported with
+`source = "interpolated"`. The figure caption now separates the two, reading
+`measured 5 % | rendered 14 % incl. interpolated`.
+
+Finer binning helped as well, at `cell_px` 32 rather than 48, and relaxing
+`filter_std` to 3.0 because eight detections per frame make the median absolute
+deviation a noisy rejection statistic. Together: 99 measured cells against 56,
+2298 vectors against 2216, and uncalibrated RMSE against the ADV of 0.18 m/s
+against 0.34 m/s.
+
+### 13.10 What would raise coverage
 
 Coverage, not accuracy, is the limit at 5 %.
 

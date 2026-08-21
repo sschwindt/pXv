@@ -108,3 +108,71 @@ def test_piv_health_gate_keeps_tracer_vectors_undiluted():
     assert static_fraction(ptv_only) == 0.0
     assert np.median(with_piv.magnitude()[with_piv.valid]) < 1.0
     assert np.median(ptv_only.magnitude()[ptv_only.valid]) == pytest.approx(9.0)
+
+
+class _ScatterTrack:
+    """Vectors along a diagonal path, as a tracer pulse would leave."""
+
+    def __init__(self, count: int = 60):
+        t = np.linspace(0, 1, count)
+        self.px = 20 + t * 200
+        self.py = 20 + t * 100
+        self.n = count
+
+    def stacked(self):
+        return (self.px, self.py,
+                np.full(self.n, 5.0), np.full(self.n, 2.5), np.zeros(self.n))
+
+
+def _scatter_track(count: int = 60) -> _ScatterTrack:
+    return _ScatterTrack(count)
+
+
+def test_gap_filling_connects_a_sparse_track():
+    """Isolated cells make streamlines stop immediately; bounded filling connects them."""
+    from pxv.velocimetry.fuse import SOURCE_INTERP, interpolate_gaps
+
+    field = fuse((256, 320), 16, None, _scatter_track(), min_samples=1)
+    before = int(field.valid.sum())
+    filled = interpolate_gaps(field, radius_px=40.0, min_neighbours=2)
+    after = int(filled.valid.sum())
+    assert after > before
+    assert int((filled.source == SOURCE_INTERP).sum()) == after - before
+
+
+def test_interpolated_cells_are_not_counted_as_measurements():
+    from pxv.velocimetry.fuse import interpolate_gaps
+
+    field = fuse((256, 320), 16, None, _scatter_track(), min_samples=1)
+    filled = interpolate_gaps(field, radius_px=40.0)
+    assert filled.measured.sum() == field.measured.sum()
+    assert filled.n[filled.source == 3].sum() == 0
+
+
+def test_gap_filling_respects_its_radius():
+    from pxv.velocimetry.fuse import interpolate_gaps
+
+    field = fuse((256, 320), 16, None, _scatter_track(), min_samples=1)
+    near = interpolate_gaps(field, radius_px=20.0)
+    far = interpolate_gaps(field, radius_px=80.0)
+    assert far.valid.sum() > near.valid.sum()
+    assert interpolate_gaps(field, radius_px=0.0).valid.sum() == field.valid.sum()
+
+
+def test_gap_filling_preserves_the_velocity_value():
+    from pxv.velocimetry.fuse import interpolate_gaps
+
+    field = fuse((256, 320), 16, None, _scatter_track(), min_samples=1)
+    filled = interpolate_gaps(field, radius_px=40.0)
+    interp = filled.source == 3
+    assert np.allclose(filled.u[interp], 5.0, atol=1e-6)
+    assert np.allclose(filled.v[interp], 2.5, atol=1e-6)
+
+
+def test_static_fraction_ignores_interpolated_cells():
+    """Filled cells must not dilute the health check that gates calibration."""
+    from pxv.velocimetry.fuse import interpolate_gaps, static_fraction
+
+    field = fuse((256, 320), 16, None, _scatter_track(), min_samples=1)
+    filled = interpolate_gaps(field, radius_px=40.0)
+    assert static_fraction(filled) == static_fraction(field)

@@ -157,21 +157,21 @@ def build_streamline_figure(
 
     # An exported figure that hides its own unreliability is dangerous, so the
     # health of the run travels with the image.
-    caption = [f"coverage {fld.coverage():.0%}"]
+    measured = float(fld.measured.mean()) if hasattr(fld, "measured") else fld.coverage()
+    caption = [f"measured {measured:.0%}"]
+    if fld.coverage() > measured + 1e-9:
+        caption.append(f"rendered {fld.coverage():.0%} incl. interpolated")
     if np.isfinite(getattr(result, "static_fraction", np.nan)):
         caption.append(f"static cells {result.static_fraction:.0%} "
                        f"[{result.static_verdict}]")
     if result.transform.mode != "none":
         caption.append(f"geometry {result.transform.mode}")
+    warn = getattr(result, "static_verdict", "") == "suspect" or measured < 0.10
+    if warn:
+        caption.append("provisional: sparse or static field")
     note = "  |  ".join(caption)
-    warn = getattr(result, "static_verdict", "") == "suspect" or fld.coverage() < 0.5
     ax.text(0.0, -0.012, note, transform=ax.transAxes, ha="left", va="top",
             fontsize=7.5, color="#B23B2E" if warn else "#5C6C86")
-    if warn:
-        ax.text(1.0, -0.012,
-                "sparse or static field: treat these velocities as provisional",
-                transform=ax.transAxes, ha="right", va="top", fontsize=7.5,
-                color="#B23B2E")
 
     fig.tight_layout()
     return fig

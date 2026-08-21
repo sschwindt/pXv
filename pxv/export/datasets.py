@@ -72,7 +72,7 @@ def write_gpkg(result, path: str | Path, layer: str = "velocity") -> Path | None
         return None
     fld = result.field
     speed = np.hypot(u, v)
-    src_names = np.array(["none", "piv", "ptv"])
+    src_names = np.array(["none", "piv", "ptv", "interpolated"])
     gdf = gpd.GeoDataFrame(
         {
             "u": u.ravel()[m],

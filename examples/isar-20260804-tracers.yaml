@@ -5,7 +5,7 @@ video:
   # 1200-1700, peaking 1300-1600 at 10-13 tracers per frame over the water
   start: 1200
   stop: 1700
-  step: 2            # dt = 67 ms, so ~4 px at 1.5 m/s and 25 mm/px
+  step: 1            # every frame: twice the tracked pairs
   secondary_path: examples/isar-20260804/DJI_20260804150234_0002_F.MP4
   fps: 0.0           # read from the container
   roi: []
@@ -82,9 +82,9 @@ ptv:
   peak_threshold: 0.02
   auto_threshold: true
   peak_neighbourhood: 1
-  motion_neighbours: 8
-  filter_std: 2.0
-  max_displacement: 20.0
+  motion_neighbours: 6
+  filter_std: 3.0    # ~8 detections per frame makes the MAD statistic noisy
+  max_displacement: 12.0
   piv_guided: true   # the PIV field seeds the tracer motion model
 analysis:
   # drawn by hand: automatic water detection is unreliable on a sunlit gravel bar,
@@ -96,8 +96,15 @@ analysis:
     - [[575, 1045], [640, 880], [760, 818], [880, 858], [925, 960], [885, 1055]]
   exclude: []
 grid:
-  cell_px: 48
-  min_samples: 2
+  cell_px: 32
+  min_samples: 1
+  # a tracer pulse leaves vectors along the paths it took. Without bounded filling
+  # a streamline cannot step from one cell to the next, and a real measurement
+  # renders as a handful of stubs. Filled cells are tagged and never counted as
+  # measurements.
+  interpolate_radius_px: 90.0
+  interpolate_min_neighbours: 2
+  piv_health_gate: 0.5
 groundtruth:
   path: examples/isar-20260804/IsarAug2026.gpkg
   layer: ft_tke_points

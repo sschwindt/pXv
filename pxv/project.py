@@ -34,6 +34,13 @@ class VideoCfg:
 
 @dataclass
 class PreprocessCfg:
+    """The four ordered stages of the reference chain.
+
+    1. background subtraction, 2. normalization, 3. enhancement, and then the
+    correlation filter in the velocimetry stage. Each is separately switchable so
+    its contribution can be judged on its own.
+    """
+
     grayscale: bool = True
     #: static background = mean of every ``bg_stride``-th frame over the whole clip
     background: Literal["static", "rolling", "adaptive", "none"] = "static"
@@ -43,11 +50,23 @@ class PreprocessCfg:
     bg_window: int = 15
     #: adaptation speed when ``background == "adaptive"``
     bg_speed: float = 0.02
+    #: stage 1, optional: remove structure larger than this, e.g. an illumination
+    #: gradient. 0 disables.
+    highpass_sigma: float = 0.0
+    median: int = 0  # kernel size, 0 disables
+    #: stage 2
     normalize: bool = True
+    #: percentile window for the normalization. A wider window stretches noise
+    #: less, which matters when the surface signal is faint.
+    norm_low: float = 1.0
+    norm_high: float = 99.0
+    #: stage 3
     clahe: bool = True
     clahe_clip: float = 2.0
     clahe_grid: int = 8
-    median: int = 0  # kernel size, 0 disables
+    #: unsharp mask, applied after CLAHE. 0 disables.
+    unsharp_sigma: float = 2.0
+    unsharp_amount: float = 0.0
     invert: bool = False  # track dark objects on a bright surface
 
 
@@ -192,6 +211,13 @@ class GridCfg:
     cell_px: int = 32
     #: drop cells with fewer than this many samples
     min_samples: int = 3
+    #: fill grid cells within this many pixels of a measured cell, by inverse
+    #: distance weighting. A sparse tracer field is a set of vectors along the
+    #: paths the tracers took; without this a streamline cannot step from one cell
+    #: to the next and a real measurement renders as a handful of stubs. Filled
+    #: cells are tagged as interpolated and never counted as measurements.
+    interpolate_radius_px: float = 0.0
+    interpolate_min_neighbours: int = 2
     #: exclude the PIV field from the output when more than this fraction of its
     #: cells report no motion. PIV is still computed and still guides PTV where it
     #: is healthy, but a bed-locked field must not be fused in as if it were a

@@ -63,3 +63,37 @@ def test_ensemble_recovers_displacement(particle_pair):
                                    corr_threshold=0.4, snr_threshold=2.0))
     assert abs(np.median(f.u[f.valid]) - 4.0) < 0.4
     assert abs(np.median(f.v[f.valid]) + 3.0) < 0.4
+
+
+def test_preprocess_reports_every_stage_in_order():
+    """Each step of the four-stage chain has to be judgeable on its own."""
+    from pxv.preprocess.enhance import preprocess_frame, stage_metrics
+    from pxv.project import PreprocessCfg
+
+    rng = np.random.default_rng(0)
+    frame = (rng.random((128, 128)) * 255).astype(np.uint8)
+    background = np.full((128, 128), 100.0, np.float32)
+    cfg = PreprocessCfg(background="static", normalize=True, clahe=True,
+                        unsharp_amount=1.0)
+    report: list = []
+    preprocess_frame(frame, cfg, background, report=report)
+    labels = [label for label, _ in report]
+    assert labels[0].startswith("0 input")
+    assert any(l.startswith("1 background") for l in labels)
+    assert any(l.startswith("2 normalize") for l in labels)
+    assert any(l.startswith("3 CLAHE") for l in labels)
+    assert any(l.startswith("3b unsharp") for l in labels)
+    assert labels == sorted(labels)          # stages recorded in order
+    for _, m in report:
+        assert set(m) == {"contrast", "texture", "saturated", "range"}
+
+
+def test_stage_metrics_detect_saturation():
+    from pxv.preprocess.enhance import stage_metrics
+
+    flat = np.full((64, 64), 0.5, np.float32)
+    assert stage_metrics(flat)["saturated"] == 1.0
+    rng = np.random.default_rng(1)
+    varied = rng.random((64, 64)).astype(np.float32)
+    assert stage_metrics(varied)["saturated"] < 0.01
+    assert stage_metrics(varied)["texture"] > 0

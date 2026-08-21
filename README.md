@@ -65,6 +65,10 @@ pxv run examples/mq-slots.yaml
 
 Order follows the reference workflow (Broß, Dorthe & Schalko 2026):
 
+Each preprocessing stage is separately switchable and separately reported, so its
+contribution to contrast, fine texture and saturation is visible rather than
+entangled with the others.
+
 1. **Stabilise** against wind-gust drift, using a homography estimated from
    *static* pixels only, with the moving water masked out (Ioli et al. 2020).
    pXv re-anchors to a global reference frame periodically rather than chaining
@@ -214,6 +218,17 @@ things. So PIV's contribution is gated on its own static-motion check:
 
 Every exclusion is logged, never silent.
 
+### Sparse fields and streamlines
+
+A tracer pulse leaves vectors along the paths the tracers took, so binning gives
+isolated cells, and a streamline that cannot step from one cell to the next stops
+immediately: a real measurement renders as a handful of stubs.
+`grid.interpolate_radius_px` fills cells within a bounded distance of a measured
+one. Filled cells are tagged as interpolated, carry a zero sample count, are
+excluded from every statistic and from the health checks, and are exported with
+`source = "interpolated"`. The figure caption separates measured from rendered
+coverage.
+
 ### Seeded tracers
 
 Injected tracers are far brighter than anything else on the water and have a
@@ -225,6 +240,19 @@ detections per frame.
 
 Find the seeded window before analysing: tracer density varies enormously over a
 clip, and a window chosen before injection measures only the riverbed.
+
+Two things that look like they should help and do not, both measured rather than
+assumed:
+
+- **Running the preprocessing chain before tracer detection.** It exists to
+  amplify faint texture so correlation can lock onto it. Tracers are the opposite
+  case, the brightest thing in the frame, so amplifying faint texture destroys the
+  contrast that identifies them. On the Isar clip the chain turns a 33x
+  tracer-to-background contrast into 1.3x, and adding CLAHE or an unsharp mask
+  inverts it entirely.
+- **Ensemble correlation.** Averaging correlation planes over many pairs is the
+  standard remedy for sparse seeding, but it reinforces whatever is consistent
+  across pairs. Where a stationary bed competes with the tracers, that is the bed.
 
 ### Clear water over a visible bed
 

@@ -14,7 +14,7 @@ import numpy as np
 
 from pxv.velocimetry.piv import PIVField
 
-SOURCE_NONE, SOURCE_PIV, SOURCE_PTV = 0, 1, 2
+SOURCE_NONE, SOURCE_PIV, SOURCE_PTV, SOURCE_INTERP = 0, 1, 2, 3
 
 
 @dataclass
@@ -38,10 +38,15 @@ class VelocityField:
 
     @property
     def valid(self) -> np.ndarray:
-        return self.n > 0
+        return (self.n > 0) | (self.source == SOURCE_INTERP)
 
     def coverage(self) -> float:
         return float(self.valid.mean()) if self.valid.size else 0.0
+
+    @property
+    def measured(self) -> np.ndarray:
+        """Cells backed by an actual measurement, excluding interpolated fill."""
+        return (self.n > 0) & (self.source != SOURCE_INTERP)
 
     def summary(self) -> str:
         m = self.magnitude()[self.valid]
@@ -49,10 +54,13 @@ class VelocityField:
             return "field: empty"
         npiv = int((self.source == SOURCE_PIV).sum())
         nptv = int((self.source == SOURCE_PTV).sum())
+        nint = int((self.source == SOURCE_INTERP).sum())
+        extra = f", interpolated {nint}" if nint else ""
         return (
-            f"field: {self.u.shape[1]}x{self.u.shape[0]} cells, coverage {self.coverage():.0%}, "
+            f"field: {self.u.shape[1]}x{self.u.shape[0]} cells, coverage {self.coverage():.0%} "
+            f"(measured {self.measured.mean():.0%}), "
             f"|v| median {np.median(m):.3f} p95 {np.percentile(m, 95):.3f} px/interval "
-            f"| cells from PIV {npiv}, PTV {nptv}"
+            f"| cells from PIV {npiv}, PTV {nptv}{extra}"
         )
 
 
@@ -149,6 +157,66 @@ def fuse(
     return VelocityField(x=xx, y=yy, u=u, v=v, n=n, source=src, cell_px=float(cell))
 
 
+def interpolate_gaps(field: "VelocityField", radius_px: float, power: float = 2.0,
+                    min_neighbours: int = 2) -> "VelocityField":
+    """Fill cells that lie within ``radius_px`` of a measured cell.
+
+    A sparse tracer field is a set of vectors along the paths the tracers took.
+    Binning it leaves isolated cells, and a streamline that cannot step from one
+    cell to the next stops immediately, which is why a real measurement can render
+    as a handful of stubs.
+
+    Filling the gaps between nearby measurements makes the streamlines continuous
+    over the area that was actually observed. The radius bounds how far that goes,
+    and the filled cells are tagged ``SOURCE_INTERP`` so they are never mistaken
+    for measurements: they carry no sample count and are excluded from ``measured``.
+    """
+    if radius_px <= 0:
+        return field
+    src = field.measured
+    if not src.any():
+        return field
+
+    from scipy.spatial import cKDTree
+
+    known = np.column_stack([field.x[src], field.y[src]])
+    tree = cKDTree(known)
+    ku = field.u[src]
+    kv = field.v[src]
+
+    target = ~src
+    if not target.any():
+        return field
+    tx = field.x[target]
+    ty = field.y[target]
+    neighbours = tree.query_ball_point(np.column_stack([tx, ty]), r=float(radius_px))
+
+    u = field.u.copy()
+    v = field.v.copy()
+    source = field.source.copy()
+    filled_u = np.full(len(tx), np.nan)
+    filled_v = np.full(len(tx), np.nan)
+    for i, ids in enumerate(neighbours):
+        if len(ids) < min_neighbours:
+            continue
+        d = np.hypot(known[ids, 0] - tx[i], known[ids, 1] - ty[i])
+        w = 1.0 / np.maximum(d, 1e-6) ** power
+        w /= w.sum()
+        filled_u[i] = float(np.sum(w * ku[ids]))
+        filled_v[i] = float(np.sum(w * kv[ids]))
+
+    ok = np.isfinite(filled_u)
+    idx = np.nonzero(target)
+    rows, cols = idx[0][ok], idx[1][ok]
+    u[rows, cols] = filled_u[ok]
+    v[rows, cols] = filled_v[ok]
+    source[rows, cols] = SOURCE_INTERP
+    n = field.n.copy()          # interpolated cells keep a zero sample count
+    out = VelocityField(x=field.x, y=field.y, u=u, v=v, n=n, source=source,
+                        cell_px=field.cell_px)
+    return out
+
+
 def seeding_density(detections_per_frame: float, image_shape: tuple[int, int], window: int) -> float:
     """Detectable objects per interrogation window.
 
@@ -170,9 +238,10 @@ def static_fraction(field: "VelocityField", threshold_px: float = 0.3) -> float:
     should be moving water is the signal that this is happening, and no amount of
     parameter tuning will fix it: the bed really is the dominant signal.
     """
-    if not field.valid.any():
+    src = field.measured
+    if not src.any():
         return 1.0
-    mag = field.magnitude()[field.valid]
+    mag = field.magnitude()[src]
     return float(np.mean(mag < threshold_px))
 
 

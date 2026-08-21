@@ -168,12 +168,27 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
         background = ab.update(raw[-1])
         _log(log, f"adaptive background, speed {pcfg.bg_speed}", verbose)
 
+    # run one frame with per-stage reporting, so each step of the chain can be
+    # judged on its own rather than as one opaque block
+    stages: list = []
+    preprocess_frame(raw[len(raw) // 2], pcfg,
+                     backgrounds[len(raw) // 2] if pcfg.background == "rolling" else background,
+                     report=stages)
+    for label, m in stages:
+        _log(log, f"  preprocess {label:26s} contrast {m['contrast']:7.4f}  "
+                  f"texture {m['texture']:7.4f}  saturated {m['saturated']:5.1%}", verbose)
+
     if pcfg.background == "rolling":
         proc = np.stack([preprocess_frame(f, pcfg, b) for f, b in zip(raw, backgrounds)])
     else:
         proc = np.stack([preprocess_frame(f, pcfg, background) for f in raw])
 
     # PIV and PTV want different preprocessing, so keep both.
+    # The four-stage chain exists to amplify faint texture so correlation can lock
+    # onto it. Injected tracers are the opposite case: they are the brightest thing
+    # in the frame, and amplifying faint texture destroys the contrast that
+    # identifies them. Measured on the Isar clip, the chain turns a 33x
+    # tracer-to-background contrast into 1.3x or worse. So PTV bypasses it.
     ptv_frames = (raw.astype(np.float32) / 255.0) if project.ptv.use_raw else proc
 
     amask = analysis_mask(proc.shape[1:], project.analysis.include, project.analysis.exclude)
@@ -248,6 +263,16 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
         field.n = np.where(keep, field.n, 0)
         field.source = np.where(keep, field.source, fuse_mod.SOURCE_NONE)
     _log(log, field.summary(), verbose)
+
+    if project.grid.interpolate_radius_px > 0:
+        before = int(field.measured.sum())
+        field = fuse_mod.interpolate_gaps(field, project.grid.interpolate_radius_px,
+                                          min_neighbours=project.grid.interpolate_min_neighbours)
+        after = int(field.valid.sum())
+        _log(log, f"gap filling within {project.grid.interpolate_radius_px:.0f} px: "
+                  f"{before} measured cells -> {after} rendered "
+                  f"({after - before} interpolated, tagged and excluded from statistics)",
+             verbose)
 
     static_frac = fuse_mod.static_fraction(field)
     verdict, note = fuse_mod.assess_static(static_frac)
