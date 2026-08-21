@@ -1,0 +1,294 @@
+1
+00:00:00,000 --> 00:00:00,033
+<font size="28">FrameCnt: 1, DiffTime: 33ms
+2026-08-04 14:56:44.771
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.997 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+2
+00:00:00,033 --> 00:00:00,066
+<font size="28">FrameCnt: 2, DiffTime: 33ms
+2026-08-04 14:56:44.841
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.997 abs_alt: 895.476] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+3
+00:00:00,066 --> 00:00:00,099
+<font size="28">FrameCnt: 3, DiffTime: 33ms
+2026-08-04 14:56:44.862
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.997 abs_alt: 895.476] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+4
+00:00:00,099 --> 00:00:00,133
+<font size="28">FrameCnt: 4, DiffTime: 34ms
+2026-08-04 14:56:44.875
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.997 abs_alt: 895.476] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+5
+00:00:00,133 --> 00:00:00,166
+<font size="28">FrameCnt: 5, DiffTime: 33ms
+2026-08-04 14:56:44.902
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+6
+00:00:00,166 --> 00:00:00,199
+<font size="28">FrameCnt: 6, DiffTime: 33ms
+2026-08-04 14:56:44.912
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+7
+00:00:00,199 --> 00:00:00,233
+<font size="28">FrameCnt: 7, DiffTime: 34ms
+2026-08-04 14:56:44.935
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+8
+00:00:00,233 --> 00:00:00,266
+<font size="28">FrameCnt: 8, DiffTime: 33ms
+2026-08-04 14:56:44.960
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+9
+00:00:00,266 --> 00:00:00,299
+<font size="28">FrameCnt: 9, DiffTime: 33ms
+2026-08-04 14:56:44.992
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+10
+00:00:00,299 --> 00:00:00,333
+<font size="28">FrameCnt: 10, DiffTime: 34ms
+2026-08-04 14:56:45.018
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+11
+00:00:00,333 --> 00:00:00,366
+<font size="28">FrameCnt: 11, DiffTime: 33ms
+2026-08-04 14:56:45.042
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+12
+00:00:00,366 --> 00:00:00,399
+<font size="28">FrameCnt: 12, DiffTime: 33ms
+2026-08-04 14:56:45.078
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+13
+00:00:00,399 --> 00:00:00,433
+<font size="28">FrameCnt: 13, DiffTime: 34ms
+2026-08-04 14:56:45.118
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+14
+00:00:00,433 --> 00:00:00,466
+<font size="28">FrameCnt: 14, DiffTime: 33ms
+2026-08-04 14:56:45.152
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+15
+00:00:00,466 --> 00:00:00,499
+<font size="28">FrameCnt: 15, DiffTime: 33ms
+2026-08-04 14:56:45.203
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+16
+00:00:00,499 --> 00:00:00,533
+<font size="28">FrameCnt: 16, DiffTime: 34ms
+2026-08-04 14:56:45.234
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+17
+00:00:00,533 --> 00:00:00,566
+<font size="28">FrameCnt: 17, DiffTime: 33ms
+2026-08-04 14:56:45.269
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+18
+00:00:00,566 --> 00:00:00,599
+<font size="28">FrameCnt: 18, DiffTime: 33ms
+2026-08-04 14:56:45.288
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+19
+00:00:00,599 --> 00:00:00,633
+<font size="28">FrameCnt: 19, DiffTime: 34ms
+2026-08-04 14:56:45.315
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+20
+00:00:00,633 --> 00:00:00,666
+<font size="28">FrameCnt: 20, DiffTime: 33ms
+2026-08-04 14:56:45.353
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+21
+00:00:00,666 --> 00:00:00,699
+<font size="28">FrameCnt: 21, DiffTime: 33ms
+2026-08-04 14:56:45.402
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+22
+00:00:00,699 --> 00:00:00,733
+<font size="28">FrameCnt: 22, DiffTime: 34ms
+2026-08-04 14:56:45.431
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.997 abs_alt: 895.476] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+23
+00:00:00,733 --> 00:00:00,766
+<font size="28">FrameCnt: 23, DiffTime: 33ms
+2026-08-04 14:56:45.454
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.997 abs_alt: 895.476] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+24
+00:00:00,766 --> 00:00:00,799
+<font size="28">FrameCnt: 24, DiffTime: 33ms
+2026-08-04 14:56:45.477
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+25
+00:00:00,799 --> 00:00:00,833
+<font size="28">FrameCnt: 25, DiffTime: 34ms
+2026-08-04 14:56:45.509
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+26
+00:00:00,833 --> 00:00:00,866
+<font size="28">FrameCnt: 26, DiffTime: 33ms
+2026-08-04 14:56:45.543
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+27
+00:00:00,866 --> 00:00:00,899
+<font size="28">FrameCnt: 27, DiffTime: 33ms
+2026-08-04 14:56:45.585
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+28
+00:00:00,899 --> 00:00:00,933
+<font size="28">FrameCnt: 28, DiffTime: 34ms
+2026-08-04 14:56:45.612
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+29
+00:00:00,933 --> 00:00:00,966
+<font size="28">FrameCnt: 29, DiffTime: 33ms
+2026-08-04 14:56:45.641
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+30
+00:00:00,966 --> 00:00:00,999
+<font size="28">FrameCnt: 30, DiffTime: 33ms
+2026-08-04 14:56:45.732
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.998 abs_alt: 895.477] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+31
+00:00:00,999 --> 00:00:01,033
+<font size="28">FrameCnt: 31, DiffTime: 34ms
+2026-08-04 14:56:45.744
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.479] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+32
+00:00:01,033 --> 00:00:01,066
+<font size="28">FrameCnt: 32, DiffTime: 33ms
+2026-08-04 14:56:45.775
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.479] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+33
+00:00:01,066 --> 00:00:01,099
+<font size="28">FrameCnt: 33, DiffTime: 33ms
+2026-08-04 14:56:45.799
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 30.000 abs_alt: 895.479] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+34
+00:00:01,099 --> 00:00:01,133
+<font size="28">FrameCnt: 34, DiffTime: 34ms
+2026-08-04 14:56:45.832
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 30.000 abs_alt: 895.479] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+35
+00:00:01,133 --> 00:00:01,166
+<font size="28">FrameCnt: 35, DiffTime: 33ms
+2026-08-04 14:56:45.856
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540613] [longitude: 11.353089] [rel_alt: 30.000 abs_alt: 895.479] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+36
+00:00:01,166 --> 00:00:01,199
+<font size="28">FrameCnt: 36, DiffTime: 33ms
+2026-08-04 14:56:45.877
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 30.000 abs_alt: 895.479] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+37
+00:00:01,199 --> 00:00:01,233
+<font size="28">FrameCnt: 37, DiffTime: 34ms
+2026-08-04 14:56:45.908
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 30.000 abs_alt: 895.479] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+38
+00:00:01,233 --> 00:00:01,266
+<font size="28">FrameCnt: 38, DiffTime: 33ms
+2026-08-04 14:56:45.945
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 30.000 abs_alt: 895.479] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+39
+00:00:01,266 --> 00:00:01,299
+<font size="28">FrameCnt: 39, DiffTime: 33ms
+2026-08-04 14:56:45.978
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 30.001 abs_alt: 895.480] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+40
+00:00:01,299 --> 00:00:01,333
+<font size="28">FrameCnt: 40, DiffTime: 34ms
+2026-08-04 14:56:46.023
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 30.001 abs_alt: 895.480] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+41
+00:00:01,333 --> 00:00:01,366
+<font size="28">FrameCnt: 41, DiffTime: 33ms
+2026-08-04 14:56:46.044
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 30.001 abs_alt: 895.480] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+42
+00:00:01,366 --> 00:00:01,399
+<font size="28">FrameCnt: 42, DiffTime: 33ms
+2026-08-04 14:56:46.074
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.479] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+43
+00:00:01,399 --> 00:00:01,433
+<font size="28">FrameCnt: 43, DiffTime: 34ms
+2026-08-04 14:56:46.112
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.479] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+44
+00:00:01,433 --> 00:00:01,466
+<font size="28">FrameCnt: 44, DiffTime: 33ms
+2026-08-04 14:56:46.143
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.479] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+45
+00:00:01,466 --> 00:00:01,499
+<font size="28">FrameCnt: 45, DiffTime: 33ms
+2026-08-04 14:56:46.179
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+46
+00:00:01,499 --> 00:00:01,533
+<font size="28">FrameCnt: 46, DiffTime: 34ms
+2026-08-04 14:56:46.212
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.8 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+47
+00:00:01,533 --> 00:00:01,566
+<font size="28">FrameCnt: 47, DiffTime: 33ms
+2026-08-04 14:56:46.241
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+48
+00:00:01,566 --> 00:00:01,599
+<font size="28">FrameCnt: 48, DiffTime: 33ms
+2026-08-04 14:56:46.277
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+
+49
+00:00:01,599 --> 00:00:01,633
+<font size="28">FrameCnt: 49, DiffTime: 34ms
+2026-08-04 14:56:46.320
+[focal_len: 25.00] [dzoom_ratio: 1.00], [latitude: 47.540614] [longitude: 11.353089] [rel_alt: 29.999 abs_alt: 895.478] [gb_yaw: -1.7 gb_pitch: -78.4 gb_roll: 0.0] </font>
+

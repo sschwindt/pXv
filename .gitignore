@@ -222,3 +222,8 @@ tractrac-env/
 *~
 *-out/
 .pxv-cache/
+
+# large sample media: keep the telemetry and survey data, not the footage
+examples/**/*.MP4
+examples/**/*.mp4
+!tractracSources/ssc-samples/*.mp4

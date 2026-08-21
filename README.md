@@ -85,9 +85,19 @@ Order follows the reference workflow (Broß, Dorthe & Schalko 2026):
 | Mode | When | Accuracy |
 |---|---|---|
 | `gcp` / `orthophoto` | control points with known world coordinates | best; RANSAC over all points, per-point residuals |
+| `camera` | a DJI `.SRT` with height, gimbal attitude and focal length | full projective rectification with **no ground control at all** |
 | `known_distance` | a known real length visible in frame | exact for a nadir view of a flat surface; ideal in a flume |
-| `height` | flight height and field of view only | ground sampling distance is **linear in height** |
+| `height` | flight height and field of view only | uniform scale; valid only within a degree or two of nadir |
 | `none` | no scaling | pixels per frame |
+
+**A locked gimbal is not a nadir gimbal.** DJI reports `gb_pitch`, and a hover
+held steady at, say, -78.4 degrees sits 11.6 degrees off nadir. That makes the
+ground sampling distance vary systematically across the frame, by around 17 % in
+that example, so a single scale factor is wrong no matter how carefully it is
+chosen. `camera` mode builds the image-to-ground homography from the telemetry
+and reports the ground sampling distance at the frame centre, top and bottom so
+the spread is visible. pXv warns whenever the gimbal is more than two degrees off
+nadir.
 
 Ground sampling distance scales linearly with height, so a 2 m error in the
 takeoff-to-water-surface offset at 40 m altitude is a flat 5 % velocity bias
@@ -97,35 +107,53 @@ is what happens when they sit along cross-sections, pXv reports the condition
 number and falls back to a similarity transform rather than fitting a degenerate
 homography.
 
+### DJI telemetry
+
+With Video Captions enabled, a Mavic 3 writes a `.SRT` sidecar next to the `.MP4`
+carrying position, `rel_alt`, `abs_alt`, gimbal yaw/pitch/roll, focal length and
+zoom, once per frame. Note that a single bracket can hold several fields, as in
+`[rel_alt: 35.217 abs_alt: 900.696]` and
+`[gb_yaw: -2.0 gb_pitch: -78.4 gb_roll: 0.0]`; a parser that treats one bracket
+as one field silently drops `abs_alt` and both gimbal angles. `abs_alt` is
+barometric and routinely tens of metres out, so pXv never uses it for scale.
+
 ## Ground truth and the profile conversion
 
-Point gauging measures velocity at a fixed fraction of the depth. When those
-points sit at **0.6 h and 0.8 h above the bed** they are neither depth-averaged
-nor surface velocity, so a single surface coefficient alpha is the wrong model.
+Point gauging measures velocity at a fixed fraction of the depth, which is
+neither depth-averaged nor surface velocity, so a single surface coefficient
+alpha is the wrong model.
 
-Note this is not the conventional "0.6 depth" rule, which means 0.6 of the depth
-*below the surface* (0.4 h above the bed) and exists precisely because it
-approximates the depth average. Measured upward from the bed, the points sit high
-in the profile and the correction is small: about 6 to 15 % at 0.6 h and 3 to 7 %
-at 0.8 h, against 15 to 30 % for a depth-averaged value.
+**Watch the convention.** Standard hydrometric gauging reports depth measured
+*downward from the water surface*, which is why 0.2, 0.6 and 0.8 recur: they are
+the classic two-point and six-tenths positions. Height above the bed is then
+`1 - meas/total`. Set `depth_convention` to say which your file uses; getting it
+backwards inverts the velocity profile. If a file carries `Meas_Depth_m` and
+`Total_Depth_m`, pXv derives the height for you.
 
-Where a vertical carries **both** heights, two points determine a logarithmic
-profile completely, with no assumed roughness:
+Where a vertical carries **two** heights, they determine a logarithmic profile
+completely, with no assumed roughness:
 
 ```
-u_surface = u(0.6h) + 1.7757 * (u(0.8h) - u(0.6h))
+u_surface = u_lower + K * (u_upper - u_lower),   K = ln(1/z1) / ln(z2/z1)
 ```
 
-That is exact but noisy: it amplifies the measurement standard deviation by
-**1.94**. So the default `hybrid` mode uses the paired verticals to estimate the
-site roughness `z0`, takes a robust central value, and applies that to every
-point. Conversion always runs on the ground truth, never on the computed field,
-so the exported field stays a true surface field and each point carries its own
-propagated uncertainty into the objective's weighting.
+with `z1 < z2` as fractions of depth above the bed. For the standard 0.2 / 0.8
+below-surface pair, `K = 1.161` and the measurement uncertainty is amplified by
+only **1.17**, which makes the extrapolation genuinely usable. Widely separated
+points condition the fit well; closely spaced ones do not.
 
-Required GeoPackage attributes: velocity (components or speed), `z_over_h`, `h`,
-and ideally `vertical_id` and `sigma`. Without a measured standard error, pXv
-falls back to the FlowTracker2 specification (1 % of reading, floor 0.25 cm/s).
+The default `hybrid` mode uses the paired verticals to estimate the site
+roughness `z0`, takes a robust central value, and applies that to every point,
+including the single-height ones. Conversion always runs on the ground truth,
+never on the computed field, so the exported field stays a true surface field and
+each point carries its own propagated uncertainty into the objective's weighting.
+
+Required GeoPackage attributes: velocity (components or speed), a measurement
+height (`z_over_h`, or `Meas_Depth_m` plus `Total_Depth_m`), and depth. Verticals
+are grouped by position when there is no `vertical_id` column. Without a measured
+standard error, pXv applies `sigma_rel`, which defaults to 5 % of reading, a
+reasonable working figure for an ADV in a natural stream where turbulence
+dominates the instrument specification.
 
 ## Calibration tiers
 
@@ -135,7 +163,7 @@ producing a meaningless field that validates perfectly.
 
 | Tier | Contents | Treatment |
 |---|---|---|
-| 0 | geometry, frame interval, CRS, stabilisation quality | fixed first, never optimized |
+| 0 | geometry, frame interval, CRS, stabilisation quality | fixed first, never optimized; **gates the whole search** |
 | 0.5 | one global scale factor | fitted **alone and first**, then frozen; only needed when no dedicated control points exist |
 | 1 | window, overlap, correlation threshold, frame step, preprocessing strength | the actual search space |
 | 2 | profile conversion of the ground truth | handled separately, see above |
@@ -143,6 +171,50 @@ producing a meaningless field that validates perfectly.
 Calibration and validation error are always reported separately, over a held-out
 subset of the ground-truth points. With a handful of gauged verticals it is
 trivially easy to overfit, and the report makes that visible.
+
+**The Tier 0 gate.** Before any search runs, pXv checks whether the field is
+measuring the right thing at all, and refuses to continue if it is not:
+
+- the **static-motion check**, the share of cells whose displacement is
+  indistinguishable from zero. The seeding-density diagnostic counts detectable
+  objects but cannot tell a drifting tracer from a stationary stone.
+- the **bias diagnosis**, which separates a scale error from a velocimetry
+  failure. A scale error multiplies every point by the same factor, so the
+  modelled-to-measured ratios cluster tightly and one scale factor fixes them. A
+  velocimetry failure scatters the ratios over orders of magnitude, biased in one
+  direction only.
+
+Optimizing on top of a velocimetry failure is the failure mode the tiers exist to
+prevent: the search will find settings that fit a handful of points by chance and
+report an excellent score for a field that measures the wrong thing.
+
+### Clear water over a visible bed
+
+This is the hard case, and it is common on gravel-bed rivers. When the bed is
+visible through the surface it is the strongest texture in the frame, so
+correlation locks onto it and reports near-zero velocity with high confidence. No
+parameter choice fixes this, because the bed really is the dominant signal.
+
+Suppressing the zero-lag correlation peak looks like a fix and is not: it pins
+the reported displacement at whatever lies just outside the exclusion radius, so
+the answer stops changing with the frame interval. That is a tell, and pXv does
+not offer it.
+
+What does work is seeding the flow, or restricting the analysis region to water
+whose surface is actually textured. The static-motion check and the bias
+diagnosis are there to tell you which situation you are in.
+
+## Analysis region
+
+A rectangular ROI cannot exclude a gravel bar in the middle of a braided reach,
+and correlation over dry ground reports a confident zero. `analysis.include`
+takes a union of polygons and `analysis.exclude` cuts holes in them; both are
+drawn in the GUI viewport.
+
+Automatic water detection is offered only as a starting point. On a sunlit
+gravel-bed river, water and dry bar overlap in both brightness and colour, and
+temporal variance does not separate them either because residual camera motion
+makes every edge flicker. Draw the polygon.
 
 ## Exports
 
@@ -153,7 +225,9 @@ trivially easy to overfit, and the report makes that visible.
   `source`
 - **Streamline JPG** coloured by speed over a 50 % opacity frame of the footage,
   with a colourbar, scale bar and north arrow, plus a `.jgw` world file and
-  `.prj` so it drops into QGIS georeferenced
+  `.prj` so it drops into QGIS georeferenced. Cells with no data are masked
+  rather than filled, so streamlines stop where the measurement stopped, and the
+  figure carries its own coverage and static-motion verdict
 - **Quicklook PNG**: speed map, vector overlay, sample count, stabilisation
   residual
 

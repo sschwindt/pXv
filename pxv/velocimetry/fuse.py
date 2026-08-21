@@ -159,6 +159,39 @@ def seeding_density(detections_per_frame: float, image_shape: tuple[int, int], w
     return float(detections_per_frame) * (window * window) / float(h * w)
 
 
+def static_fraction(field: "VelocityField", threshold_px: float = 0.3) -> float:
+    """Share of valid cells whose time-averaged displacement is indistinguishable
+    from zero.
+
+    The seeding-density diagnostic counts detectable objects but cannot tell a
+    drifting tracer from a stationary stone. Over clear shallow water the bed is
+    visible through the surface and is the strongest texture in the frame, so
+    correlation locks onto it and reports zero. A high static fraction over what
+    should be moving water is the signal that this is happening, and no amount of
+    parameter tuning will fix it: the bed really is the dominant signal.
+    """
+    if not field.valid.any():
+        return 1.0
+    mag = field.magnitude()[field.valid]
+    return float(np.mean(mag < threshold_px))
+
+
+def assess_static(fraction: float) -> tuple[str, str]:
+    if fraction < 0.15:
+        return "ok", f"{fraction:.0%} of cells are static, which is normal for banks and structures"
+    if fraction < 0.40:
+        return "check", (
+            f"{fraction:.0%} of cells report no motion. Check that the analysis region "
+            "excludes banks and bars"
+        )
+    return "suspect", (
+        f"{fraction:.0%} of cells report no motion. Over clear water this usually means "
+        "correlation is locking onto the stationary bed seen through the surface rather "
+        "than onto the surface itself. Seeding, a shorter background window, or a region "
+        "restricted to rippled water are the ways out"
+    )
+
+
 def recommend_engine(density: float) -> tuple[str, str]:
     if density >= 8.0:
         return "piv", f"{density:.1f} objects per window: dense, PIV correlation is well posed"

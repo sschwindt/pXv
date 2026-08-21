@@ -121,3 +121,26 @@ class FrameCache:
         self.meta_path.write_text(
             json.dumps({"complete": True, "shape": list(self.shape), "key": self._key})
         )
+
+
+def read_frame(path: str | Path, index: int) -> np.ndarray:
+    """Decode one colour frame, for use as a backdrop.
+
+    The pipeline works in grayscale, but a faded colour frame is far more
+    readable underneath a streamplot.
+    """
+    cap = cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        raise IOError(f"cannot open video: {path}")
+    try:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(max(0, index)))
+        ok, frame = cap.read()
+        if ok:
+            return frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        ok, frame = cap.read()
+        if not ok:
+            raise IOError(f"cannot read a frame from {path}")
+        return frame
+    finally:
+        cap.release()

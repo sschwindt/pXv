@@ -7,7 +7,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from pxv.calibrate.objective import Comparison, compare, objective_value, sample_field
+from pxv.calibrate.objective import (
+    Comparison, compare, diagnose_bias, objective_value, sample_field,
+)
 from pxv.calibrate.profile import convert_to_surface
 from pxv.io.groundtruth import GroundTruth
 from pxv.pipeline import run
@@ -42,9 +44,13 @@ class CalibrationResult:
     trials: list[Trial] = field(default_factory=list)
     scale: float = 1.0
     z0_site: float = float("nan")
+    diagnosis: str = ""
+    aborted: str = ""
     log: list[str] = field(default_factory=list)
 
     def describe(self) -> str:
+        if self.aborted:
+            return f"calibration stopped before the Tier 1 search: {self.aborted}"
         if self.best is None:
             return "calibration produced no usable trial"
         lines = [
@@ -95,10 +101,33 @@ def calibrate(project: Project, gt: GroundTruth, verbose: bool = False) -> Calib
 
     radius = project.groundtruth.search_radius_m
 
-    # ---- Tier 0.5: one scale factor, alone and first ---------------------
+    # ---- Tier 0: is the field measuring the right thing at all? ----------
     base = copy.deepcopy(project)
+    r0 = run(base, verbose=False)
+    su0, sv0 = sample_field(r0, gt.x[calib], gt.y[calib], radius)
+    verdict, why = diagnose_bias(obs_speed[calib], np.hypot(su0, sv0))
+    res.diagnosis = f"{verdict}: {why}"
+    res.log.append(f"Tier 0 bias diagnosis [{verdict}] {why}")
+
+    if np.isfinite(r0.static_fraction) and r0.static_fraction > 0.5:
+        res.log.append(
+            f"Tier 0 gate: {r0.static_fraction:.0%} of cells report no motion. "
+            "The field is not measuring the surface, so a parameter search would fit "
+            "noise and report a good score for a wrong answer."
+        )
+        res.aborted = (
+            f"static-motion check failed ({r0.static_fraction:.0%} of cells static) "
+            f"and the bias diagnosis is '{verdict}'. Fix the imagery first: seed the "
+            "flow, or restrict the analysis region to water whose surface is textured."
+        )
+        return res
+    if verdict == "failure":
+        res.log.append("Tier 0 gate: the bias pattern is a velocimetry failure, not a scale error.")
+        res.aborted = why
+        return res
+
+    # ---- Tier 0.5: one scale factor, alone and first ---------------------
     if ccfg.fit_scale:
-        r0 = run(base, verbose=False)
         scale, rmse = fit_scale(r0, gt.x[calib], gt.y[calib], obs_speed[calib],
                                 radius, obs_sigma[calib])
         res.scale = scale

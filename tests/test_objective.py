@@ -46,3 +46,41 @@ def test_quarter_rule():
     # 1 m/s, 0.1 s, 20 mm/px -> 5 px displacement -> 20 px window, rounds up to 24
     assert quarter_rule_window(1.0, 0.1, 0.020) == 24
     assert quarter_rule_window(0.0, 0.1, 0.020) == 16
+
+
+def test_diagnose_scale_error():
+    """A scale error multiplies every point by the same factor."""
+    from pxv.calibrate.objective import diagnose_bias
+
+    obs = np.array([0.5, 1.0, 1.5, 2.0])
+    verdict, why = diagnose_bias(obs, obs * 0.72)
+    assert verdict == "scale"
+    assert "0.72" in why
+
+
+def test_diagnose_velocimetry_failure():
+    """Scattered, one-sided ratios are not a scale error.
+
+    This is the pattern seen when correlation locks onto a stationary bed seen
+    through clear water: every point too low, by wildly differing amounts.
+    """
+    from pxv.calibrate.objective import diagnose_bias
+
+    obs = np.array([0.17, 0.88, 1.17, 1.24, 1.31, 1.99])
+    mod = np.array([0.04, 0.17, 0.23, 0.47, 0.04, 0.01])
+    verdict, why = diagnose_bias(obs, mod)
+    assert verdict == "failure"
+    assert "not a scale error" in why
+
+
+def test_diagnose_needs_enough_points():
+    from pxv.calibrate.objective import diagnose_bias
+
+    assert diagnose_bias(np.array([1.0]), np.array([0.5]))[0] == "unknown"
+
+
+def test_diagnose_all_zero_modelled():
+    from pxv.calibrate.objective import diagnose_bias
+
+    verdict, _ = diagnose_bias(np.array([1.0, 2.0, 3.0]), np.zeros(3))
+    assert verdict == "failure"

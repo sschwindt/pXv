@@ -16,8 +16,10 @@ import numpy as np
 from pxv.geometry.world import GeoTransform, build_transform
 from pxv.io import metadata as meta_io
 from pxv.io import video as video_io
-from pxv.preprocess.enhance import AdaptiveBackground, crop, preprocess_frame, static_background, to_gray
-from pxv.preprocess.mask import static_feature_mask
+from pxv.preprocess.enhance import (
+    AdaptiveBackground, crop, preprocess_frame, rolling_background, static_background, to_gray,
+)
+from pxv.preprocess.mask import analysis_mask, static_feature_mask
 from pxv.project import Project
 from pxv.stabilize.homography import StabilizationResult, stabilize, warp_to_reference
 from pxv.velocimetry import fuse as fuse_mod
@@ -36,6 +38,8 @@ class RunResult:
     dt: float                       # seconds between the frames actually compared
     density: float = float("nan")
     engine_note: str = ""
+    static_fraction: float = float("nan")
+    static_verdict: str = ""
     log: list[str] = field(default_factory=list)
     timings: dict = field(default_factory=dict)
 
@@ -72,6 +76,9 @@ class RunResult:
             )
         if self.engine_note:
             lines.append(f"seeding: {self.engine_note}")
+        if np.isfinite(self.static_fraction):
+            lines.append(f"static-motion check [{self.static_verdict}]: "
+                         f"{self.static_fraction:.0%} of cells report no motion")
         return "\n".join(lines)
 
 
@@ -144,10 +151,16 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
     t0 = time.time()
     pcfg = project.preprocess
     background = None
+    backgrounds = None
     if pcfg.background == "static":
         background = static_background(raw, pcfg.bg_stride)
         _log(log, f"static background: mean of every {pcfg.bg_stride}th frame "
                   f"({len(raw[::pcfg.bg_stride])} frames)", verbose)
+    elif pcfg.background == "rolling":
+        backgrounds = rolling_background(raw, pcfg.bg_window)
+        _log(log, f"rolling background over {pcfg.bg_window} frames "
+                  f"({pcfg.bg_window / fps * 1000:.0f} ms): a temporal high-pass that "
+                  "suppresses a stationary bed seen through clear water", verbose)
     elif pcfg.background == "adaptive":
         ab = AdaptiveBackground(pcfg.bg_speed)
         for f in raw:
@@ -155,7 +168,15 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
         background = ab.update(raw[-1])
         _log(log, f"adaptive background, speed {pcfg.bg_speed}", verbose)
 
-    proc = np.stack([preprocess_frame(f, pcfg, background) for f in raw])
+    if pcfg.background == "rolling":
+        proc = np.stack([preprocess_frame(f, pcfg, b) for f, b in zip(raw, backgrounds)])
+    else:
+        proc = np.stack([preprocess_frame(f, pcfg, background) for f in raw])
+
+    amask = analysis_mask(proc.shape[1:], project.analysis.include, project.analysis.exclude)
+    if amask is not None:
+        _log(log, f"analysis mask covers {amask.mean():.0%} of the frame", verbose)
+        proc = proc * amask[None, :, :].astype(np.float32)
     timings["preprocess"] = time.time() - t0
 
     # ---- seeding diagnostic ---------------------------------------------
@@ -194,13 +215,23 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
 
     field = fuse_mod.fuse(proc.shape[1:], project.grid.cell_px, piv_fields, tracks,
                           project.grid.min_samples)
+    if amask is not None:
+        keep = amask[np.clip(field.y.astype(int), 0, amask.shape[0] - 1),
+                     np.clip(field.x.astype(int), 0, amask.shape[1] - 1)]
+        field.n = np.where(keep, field.n, 0)
+        field.source = np.where(keep, field.source, fuse_mod.SOURCE_NONE)
     _log(log, field.summary(), verbose)
 
-    transform = build_transform(project.geometry, proc.shape[1:])
+    static_frac = fuse_mod.static_fraction(field)
+    verdict, note = fuse_mod.assess_static(static_frac)
+    _log(log, f"static-motion check [{verdict}]: {note}", verbose)
+
+    transform = build_transform(project.geometry, proc.shape[1:], telemetry=telemetry)
     _log(log, transform.describe(), verbose)
 
     return RunResult(
         project=project, info=info, telemetry=telemetry, stabilization=stab,
         field=field, transform=transform, dt=dt, density=density,
-        engine_note=note, log=log, timings=timings,
+        engine_note=note, static_fraction=static_frac, static_verdict=verdict,
+        log=log, timings=timings,
     )

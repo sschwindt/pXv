@@ -56,17 +56,31 @@ def test_reads_all_attributes(tmp_path):
     assert not gt.warnings
 
 
-def test_missing_sigma_falls_back_to_instrument_spec(tmp_path):
+def test_missing_sigma_falls_back_to_the_configured_relative_error(tmp_path):
     p = make_gpkg(tmp_path / "gt.gpkg", with_sigma=False)
-    gt = read_groundtruth(GroundTruthCfg(path=str(p), layer="velocity"))
+    cfg = GroundTruthCfg(path=str(p), layer="velocity", sigma_rel=0.05)
+    gt = read_groundtruth(cfg)
     assert gt.sigma is not None
-    assert any("FlowTracker2" in w for w in gt.warnings)
+    assert any("sigma_rel=5%" in w for w in gt.warnings)
+    fast = gt.speed > 0.5
+    assert np.allclose(gt.sigma[fast], 0.05 * gt.speed[fast])
 
 
-def test_missing_vertical_id_is_reported(tmp_path):
-    """Without it the roughness-free two-point method cannot be used."""
+def test_verticals_recovered_from_geometry(tmp_path):
+    """Points sharing a location are paired even without a vertical column."""
     p = make_gpkg(tmp_path / "gt.gpkg", with_vertical=False)
     gt = read_groundtruth(GroundTruthCfg(path=str(p), layer="velocity"))
+    assert gt.vertical_id is not None
+    _, counts = np.unique(gt.vertical_id, return_counts=True)
+    assert len(counts) == 6          # six verticals in the fixture
+    assert (counts >= 2).sum() == 3  # three of them carry both heights
+
+
+def test_vertical_pairing_can_be_switched_off(tmp_path):
+    p = make_gpkg(tmp_path / "gt.gpkg", with_vertical=False)
+    cfg = GroundTruthCfg(path=str(p), layer="velocity", vertical_from_geometry=False)
+    gt = read_groundtruth(cfg)
+    assert gt.vertical_id is None
     assert any("two-point" in w for w in gt.warnings)
 
 
@@ -91,3 +105,51 @@ def test_conversion_recovers_the_surface_profile(tmp_path):
     assert conv.z0_estimate == pytest.approx(Z0, rel=1e-4)
     expected = UK * np.log(gt.depth / Z0)
     assert np.allclose(conv.u_surface, expected, rtol=1e-5)
+
+
+def test_gauging_depth_convention(tmp_path):
+    """Meas/Total is depth below the surface, so z/h above bed is 1 - ratio.
+
+    Getting this backwards inverts the velocity profile, so it is worth pinning.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    rows = [
+        {"geometry": Point(0.0, 0.0), "Meas_Depth_m": 0.08, "Total_Depth_m": 0.40,
+         "v_x_m_s": 1.5, "v_y_m_s": 0.0},      # 0.2 below surface, fast
+        {"geometry": Point(0.0, 0.0), "Meas_Depth_m": 0.32, "Total_Depth_m": 0.40,
+         "v_x_m_s": 1.0, "v_y_m_s": 0.0},      # 0.8 below surface, slow
+    ]
+    path = tmp_path / "g.gpkg"
+    gpd.GeoDataFrame(rows, crs="EPSG:25832").to_file(path, layer="v", driver="GPKG")
+
+    cfg = GroundTruthCfg(path=str(path), layer="v", col_u="v_x_m_s", col_v="v_y_m_s",
+                         col_speed="", col_depth="Total_Depth_m",
+                         depth_convention="below_surface")
+    gt = read_groundtruth(cfg)
+    assert np.allclose(sorted(np.round(gt.z_over_h, 2)), [0.2, 0.8])
+    # the faster point must come out higher in the profile
+    assert gt.z_over_h[np.argmax(gt.speed)] > gt.z_over_h[np.argmin(gt.speed)]
+
+    cfg.depth_convention = "above_bed"
+    flipped = read_groundtruth(cfg)
+    assert np.allclose(sorted(np.round(flipped.z_over_h, 2)), [0.2, 0.8])
+    assert flipped.z_over_h[np.argmax(flipped.speed)] < flipped.z_over_h[np.argmin(flipped.speed)]
+
+
+def test_real_isar_file_if_present():
+    """The shipped survey, if it is in the working tree."""
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "examples" / "isar-20260804" / "IsarAug2026.gpkg"
+    if not path.exists():
+        pytest.skip("Isar sample not present")
+    cfg = GroundTruthCfg(path=str(path), layer="ft_tke_points", col_u="v_x_m_s",
+                         col_v="v_y_m_s", col_speed="", col_depth="Total_Depth_m")
+    gt = read_groundtruth(cfg)
+    assert gt.epsg == 25832
+    assert gt.has_direction
+    heights = np.round(gt.z_over_h[np.isfinite(gt.z_over_h)], 1)
+    # the classic 0.2 / 0.6 / 0.8 below-surface gauging positions
+    assert {0.2, 0.4, 0.8} <= set(np.unique(heights))

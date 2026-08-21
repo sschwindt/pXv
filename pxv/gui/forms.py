@@ -8,6 +8,7 @@ once.
 from __future__ import annotations
 
 import dataclasses
+import json
 import typing
 
 from PySide6.QtWidgets import (
@@ -112,10 +113,16 @@ class SectionForm(QWidget):
 
 
 def _to_text(value) -> str:
+    """Serialise a field for a text widget.
+
+    Lists go through JSON rather than a comma join. A polygon list is nested three
+    deep, and a flat comma format cannot round-trip that: it silently reinterprets
+    two polygons as twenty two-point ones.
+    """
     if isinstance(value, str):
         return value
     if isinstance(value, list):
-        return ", ".join(_to_text(v) for v in value)
+        return json.dumps(value)
     return str(value)
 
 
@@ -125,15 +132,15 @@ def _from_text(text: str, like):
     text = text.strip()
     if not text:
         return []
-    parts = [p.strip() for p in text.replace("[", "").replace("]", "").split(",") if p.strip()]
-    if like and isinstance(like[0], list):
-        # nested list, e.g. a polygon: expect flat pairs
-        flat = [float(p) for p in parts]
-        return [[flat[i], flat[i + 1]] for i in range(0, len(flat) - 1, 2)]
-    out = []
-    for p in parts:
-        try:
-            out.append(int(p) if float(p).is_integer() and "." not in p else float(p))
-        except ValueError:
-            out.append(p)
-    return out
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        # tolerate a plain comma-separated list of numbers for simple fields
+        parts = [p.strip() for p in text.strip("[]").split(",") if p.strip()]
+        parsed = []
+        for p in parts:
+            try:
+                parsed.append(int(p) if float(p).is_integer() and "." not in p else float(p))
+            except ValueError:
+                parsed.append(p)
+    return parsed if isinstance(parsed, list) else [parsed]

@@ -138,6 +138,51 @@ def objective_value(cmp: Comparison, w_mag: float, w_dir: float, w_yield: float,
     return w_mag * cmp.rmse + w_dir * ang_norm + penalty + matched_penalty
 
 
+def diagnose_bias(observed: np.ndarray, modelled: np.ndarray) -> tuple[str, str]:
+    """Tell a scale error apart from a velocimetry failure.
+
+    A geometry or scale error multiplies every point by the same factor, so the
+    modelled-to-measured ratios cluster tightly and a single scale factor fixes
+    them. A velocimetry failure does not: when correlation locks onto something
+    that is not the surface, the ratios scatter over orders of magnitude and are
+    biased in one direction only.
+
+    Running a parameter search on top of a velocimetry failure is the Tier 0 trap:
+    the optimizer will find settings that fit a handful of points by chance and
+    report an excellent score for a field that measures the wrong thing.
+    """
+    obs = np.asarray(observed, float)
+    mod = np.asarray(modelled, float)
+    ok = np.isfinite(obs) & np.isfinite(mod) & (obs > 1e-6)
+    if ok.sum() < 3:
+        return "unknown", "too few matched points to diagnose"
+    ratio = mod[ok] / obs[ok]
+    positive = ratio[ratio > 1e-9]
+    if positive.size < 3:
+        return "failure", "modelled velocities are essentially zero at the measured points"
+    spread = float(positive.max() / positive.min())
+    median = float(np.median(positive))
+
+    if spread < 1.6:
+        return "scale", (
+            f"ratios cluster at {median:.2f} with only a {spread:.2f}x spread, which is a "
+            f"scale error. Fit one global scale factor, or check the "
+            f"takeoff-to-water-surface offset"
+        )
+    if spread > 5.0 and median < 0.6:
+        return "failure", (
+            f"ratios scatter over {spread:.0f}x and are biased low (median {median:.2f}). "
+            "That is not a scale error, because a scale error multiplies every point by the "
+            "same factor. It is the velocimetry measuring the wrong thing, typically "
+            "correlation locking onto a stationary bed seen through clear water. Do not "
+            "calibrate on top of this"
+        )
+    return "mixed", (
+        f"ratios scatter {spread:.0f}x around a median of {median:.2f}: part scale, part "
+        "scatter. Fix the geometry first, then look at coverage"
+    )
+
+
 def fit_scale(result, wx, wy, observed_speed, radius: float, sigma=None) -> tuple[float, float]:
     """Tier 0.5: one global scale factor, by weighted least squares, alone.
 

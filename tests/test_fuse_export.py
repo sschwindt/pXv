@@ -70,3 +70,16 @@ def test_rainbow_colormaps_refused(name):
 @pytest.mark.parametrize("name", ["cividis", "viridis", "magma"])
 def test_safe_colormaps_accepted(name):
     assert check_cmap(name) == name
+
+
+def test_static_fraction_flags_a_stationary_field():
+    """The bed seen through clear water reports a confident zero."""
+    from pxv.velocimetry.fuse import assess_static, static_fraction
+
+    still = fuse((128, 128), 32, [_piv_field(shape=(4, 4), u=0.0, v=0.0)], None)
+    moving = fuse((128, 128), 32, [_piv_field(shape=(4, 4), u=3.0, v=-2.0)], None)
+    assert static_fraction(still) == 1.0
+    assert static_fraction(moving) == 0.0
+    assert assess_static(0.8)[0] == "suspect"
+    assert assess_static(0.25)[0] == "check"
+    assert assess_static(0.05)[0] == "ok"

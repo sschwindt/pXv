@@ -50,6 +50,30 @@ def static_background(frames: np.ndarray, stride: int = 10) -> np.ndarray:
     return (acc / len(sel)).astype(np.float32)
 
 
+def rolling_background(frames: np.ndarray, window: int) -> np.ndarray:
+    """Centred rolling temporal mean, one background per frame.
+
+    A whole-clip mean removes what is constant. A short rolling mean is a temporal
+    high-pass: it also removes anything that changes slowly, which over clear water
+    is the bed pattern and the illumination, leaving the fast-moving surface. The
+    window has to be long compared with the surface pattern's lifetime and short
+    compared with the bed's, so a few tenths of a second usually works.
+    """
+    if window < 2:
+        raise ValueError("rolling window must be at least 2 frames")
+    n = len(frames)
+    cumulative = np.cumsum(np.vstack([np.zeros((1,) + frames.shape[1:], np.float64),
+                                      frames.astype(np.float64)]), axis=0)
+    half = window // 2
+    out = np.empty(frames.shape, np.float32)
+    for i in range(n):
+        lo = max(0, i - half)
+        hi = min(n, lo + window)
+        lo = max(0, hi - window)
+        out[i] = ((cumulative[hi] - cumulative[lo]) / (hi - lo)).astype(np.float32)
+    return out
+
+
 def normalize(img: np.ndarray) -> np.ndarray:
     """Scale to 0..1 using robust percentiles, so a few hot pixels do not dominate."""
     lo, hi = np.percentile(img, (1.0, 99.0))

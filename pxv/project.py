@@ -33,8 +33,11 @@ class VideoCfg:
 class PreprocessCfg:
     grayscale: bool = True
     #: static background = mean of every ``bg_stride``-th frame over the whole clip
-    background: Literal["static", "adaptive", "none"] = "static"
+    background: Literal["static", "rolling", "adaptive", "none"] = "static"
     bg_stride: int = 10
+    #: window in frames for the "rolling" background, a temporal high-pass that
+    #: suppresses a stationary bed seen through clear water
+    bg_window: int = 15
     #: adaptation speed when ``background == "adaptive"``
     bg_speed: float = 0.02
     normalize: bool = True
@@ -56,29 +59,42 @@ class StabilizeCfg:
     ransac_thresh: float = 3.0
     #: re-match against the global reference frame every N frames to stop drift
     keyframe_interval: int = 30
-    #: polygon of static pixels (banks, structures); empty means "whole frame minus water_mask"
-    static_mask: list[list[float]] = field(default_factory=list)
-    #: polygon of moving water, excluded from feature detection
-    water_mask: list[list[float]] = field(default_factory=list)
+    #: polygons of static pixels (banks, bars, structures), taken as a union.
+    #: Empty means "whole frame minus water_mask".
+    static_mask: list[list[list[float]]] = field(default_factory=list)
+    #: polygons of moving water, excluded from feature detection
+    water_mask: list[list[list[float]]] = field(default_factory=list)
 
 
 @dataclass
 class GeometryCfg:
     """Pixel-to-metre scaling. Exactly one mode is active."""
 
-    mode: Literal["none", "known_distance", "height", "gcp", "orthophoto"] = "none"
-    epsg: int = 0  # 0 means "image / local coordinates, no CRS"
+    mode: Literal["none", "known_distance", "height", "camera", "gcp", "orthophoto"] = "none"
+    #: target CRS as an EPSG code; 25832 is UTM zone 32N. 0 means image coordinates.
+    epsg: int = 0
 
     # --- known_distance: two image points spanning a known real length
     known_p1: list[float] = field(default_factory=list)
     known_p2: list[float] = field(default_factory=list)
     known_length_m: float = 0.0
 
-    # --- height: nadir scaling from flight height and camera field of view
+    # --- height / camera: flight geometry
+    #: height above the takeoff point; 0 means "take rel_alt from the DJI SRT"
     height_m: float = 0.0
-    #: takeoff-to-water-surface offset, added to rel_alt from the DJI SRT
+    #: takeoff-to-water-surface offset, added to rel_alt. Positive when the takeoff
+    #: point is above the water. Ground sampling distance is linear in the result.
     water_offset_m: float = 0.0
     hfov_deg: float = 0.0
+    # --- camera: gimbal attitude and optics; 0 means "take it from the SRT"
+    yaw_deg: float = 0.0
+    #: -90 is nadir. A locked gimbal is not necessarily a nadir gimbal.
+    pitch_deg: float = 0.0
+    roll_deg: float = 0.0
+    #: 35 mm-equivalent focal length in mm, as DJI reports it
+    focal_len_35mm: float = 0.0
+    #: world coordinates of the point below the aircraft; empty means "from the SRT"
+    origin_xy: list[float] = field(default_factory=list)
 
     # --- gcp / orthophoto: image points paired with world coordinates
     gcp_image: list[list[float]] = field(default_factory=list)
@@ -137,6 +153,24 @@ class PTVCfg:
 
 
 @dataclass
+class AnalysisCfg:
+    """Where velocimetry is allowed to look.
+
+    A rectangular ROI cannot exclude a gravel bar in the middle of a braided
+    reach, and correlation over dry ground reports a confident zero. Automatic
+    water detection is unreliable on a sunlit gravel-bed river, where water and
+    bar overlap in both brightness and colour, so the mask is drawn by hand in
+    the GUI and stored here.
+    """
+
+    #: polygons of the regions to analyse, image pixels, taken as a union.
+    #: Empty means the whole ROI. A braided reach needs several.
+    include: list[list[list[float]]] = field(default_factory=list)
+    #: polygons to exclude, e.g. bars or structures inside the include polygon
+    exclude: list[list[list[float]]] = field(default_factory=list)
+
+
+@dataclass
 class GridCfg:
     """Output grid for the time-averaged field."""
 
@@ -158,12 +192,31 @@ class GroundTruthCfg:
     col_z_over_h: str = "z_over_h"
     col_sigma: str = "sigma"
     col_vertical: str = "vertical_id"
+    #: alternative to col_z_over_h: a measurement depth and a total depth
+    col_meas_depth: str = "Meas_Depth_m"
+    col_total_depth: str = "Total_Depth_m"
+    #: how col_meas_depth is referenced. Standard hydrometric gauging measures
+    #: downward from the water surface, so 0.2 / 0.6 / 0.8 are the classic
+    #: two-point and six-tenths positions. Height above the bed is then
+    #: 1 - meas/total.
+    depth_convention: Literal["below_surface", "above_bed"] = "below_surface"
+    #: relative velocity uncertainty when the file carries no error column.
+    #: 0.05 is a reasonable working figure for an ADV in a natural stream, where
+    #: turbulence dominates the instrument specification.
+    sigma_rel: float = 0.05
+    sigma_floor_ms: float = 0.0025
+    #: group points into verticals by position when there is no vertical column
+    vertical_from_geometry: bool = True
+    vertical_tolerance_m: float = 0.10
     #: search radius in metres when sampling the computed field at a point
-    search_radius_m: float = 0.5
+    search_radius_m: float = 1.0
     #: log-law conversion of the measurement to surface velocity
     conversion: Literal["two_point", "log_single", "hybrid", "none"] = "hybrid"
     #: fallback roughness length in metres when no two-point vertical is available
     z0_fallback_m: float = 0.005
+    #: drop points whose relative submergence h/z0 falls below this, where the
+    #: logarithmic profile stops being a reasonable model
+    min_submergence: float = 5.0
 
 
 @dataclass
@@ -210,6 +263,7 @@ class Project:
     geometry: GeometryCfg = field(default_factory=GeometryCfg)
     piv: PIVCfg = field(default_factory=PIVCfg)
     ptv: PTVCfg = field(default_factory=PTVCfg)
+    analysis: AnalysisCfg = field(default_factory=AnalysisCfg)
     grid: GridCfg = field(default_factory=GridCfg)
     groundtruth: GroundTruthCfg = field(default_factory=GroundTruthCfg)
     calibrate: CalibrateCfg = field(default_factory=CalibrateCfg)
@@ -259,6 +313,7 @@ _SECTION_TYPES = {
     "geometry": GeometryCfg,
     "piv": PIVCfg,
     "ptv": PTVCfg,
+    "analysis": AnalysisCfg,
     "grid": GridCfg,
     "groundtruth": GroundTruthCfg,
     "calibrate": CalibrateCfg,

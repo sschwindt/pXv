@@ -3,11 +3,12 @@
 Mixed PIV / PTV surface velocimetry for drone and lab top-view video, with a PySide6 GUI,
 ground-truth-driven parameter calibration, and QGIS-ready mesh and streamline exports.
 
-Status: revision 4. **v0.1 implemented**, see section 11.
+Status: revision 5. **v0.2 implemented and run on real drone data**, see sections 11 and 12.
 
 Revision 2 folded in the reference workflow from `README.md` (Broß et al. 2026) and an inventory of
 the `tractracSources/` baseline. Revision 3 folded in the ground-truth measurement protocol.
-Revision 4 records what building v0.1 actually taught, in section 11.
+Revision 4 records what building v0.1 taught, in section 11. Revision 5 records
+what the first real drone survey taught, in section 12.
 
 ---
 
@@ -802,3 +803,114 @@ velocities from this clip as provisional and the field *pattern* as the result.
 - **Ensemble PIV is implemented but not wired into the pipeline** as a selectable
   mode.
 - **No HTML QC report yet.** The run writes a JSON report plus a quicklook PNG.
+
+---
+
+## 12. First real survey: Isar, 4 August 2026
+
+A Mavic 3 hover over a braided reach of the Isar, with 102 FlowTracker2 verticals
+in a GeoPackage. Everything in this section is measured, not assumed.
+
+### 12.1 The data corrected two assumptions
+
+**The gimbal is locked but not nadir.** `gb_pitch` is a rock-steady -78.4 degrees
+across all 3884 frames, which is **11.6 degrees off nadir**. A locked gimbal is
+not a nadir gimbal. At 35.2 m this makes the ground sampling distance run from
+27.3 mm/px at the top of the frame to 23.3 mm/px at the bottom, a 17 % spread, so
+a single scale factor would be wrong by up to 8 % depending where in the frame a
+vector sits. This is why `geometry.mode: camera` now exists: it builds the full
+image-to-ground homography from height, gimbal attitude and focal length, all of
+which the `.SRT` carries.
+
+**The gauging convention is depth below the surface, not height above the bed.**
+Section 4.7 was written for 0.6 h and 0.8 h *above the bed*. The survey actually
+uses `Meas_Depth_m / Total_Depth_m` clustering at **0.2, 0.6 and 0.8**, and within
+any single vertical the larger ratio always carries the lower velocity. That fixes
+the direction: the ratio is depth measured downward from the water surface, and
+these are the classic two-point and six-tenths gauging positions. Height above the
+bed is `1 - ratio`, so the measurements sit at 0.8, 0.4 and 0.2 of the depth.
+
+The correction is good news twice over. The 0.2 / 0.8 pair is widely separated in
+the profile, so the two-point extrapolation is well conditioned: `K = 1.161` and
+the uncertainty amplification is **1.17**, not the 1.94 that a 0.6 / 0.8 pair
+would carry. With a 5 % ADV uncertainty that is under 6 % on the extrapolated
+surface velocity. The paired verticals give a site roughness of
+`z0 = 0.0098 m` directly from the data.
+
+### 12.2 The camera model georeferences a hover with no ground control
+
+Built from the `.SRT` alone, the model puts 17 of the 102 ADV points inside the
+52 x 30 m footprint, and projecting them back onto the imagery lands them on
+water. Nadir sanity checks hold exactly: ground sampling distance equals
+`H / f`, the frame centre maps to the aircraft position, and image-up is north.
+
+Stabilisation performs well on this scene: residual median **0.232 px**, 1996
+inliers, no failures, with features restricted to the dry gravel bars. The
+aircraft moved 3.1 x 3.2 px peak to peak over the clip, which is the direct proxy
+for gust activity now that wind data is unavailable.
+
+### 12.3 The velocimetry does not work on this clip, and that is the finding
+
+The Isar runs clear over a gravel bed. The bed is visible through the surface and
+is the strongest texture in the frame, so correlation locks onto it.
+
+| Check | Result |
+|---|---|
+| static-motion check | 76 % of cells report no motion: **suspect** |
+| vector yield | 9 % at a correlation threshold of 0.5 |
+| ADV points matched | 17 |
+| RMSE against converted surface velocity | 1.14 m/s |
+| bias | -1.11 m/s, one-sided |
+| R squared | -14.7 |
+| angular error | 36.6 degrees |
+| modelled / measured ratio | 0.006 to 0.381, a **63x spread** |
+
+The ratio spread is the diagnostic that matters. A geometry or scale error
+multiplies every point by the same factor, so the ratios would cluster. A 63x
+spread cannot be a scale error, and the bias is one-sided: every point too low,
+never too high. That is correlation measuring the bed instead of the surface.
+
+**A tempting fix that is a trap.** Suppressing the zero-lag correlation peak
+produces respectable-looking velocities. It is an artefact: the reported
+displacement then sits at 3.55 to 3.67 px whatever the frame step, when real
+motion would scale with the interval. It is not implemented, deliberately.
+
+**What the tool does instead** is refuse. `diagnose_bias` separates a scale error
+from a velocimetry failure, and the Tier 0 gate stops the parameter search before
+it starts, running zero trials and saying why. Optimizing here would have found
+some setting that fit 17 points by chance and reported an excellent score for a
+field that measures the wrong thing. This is the failure the tier design exists to
+prevent, and it fired on the first real dataset.
+
+The signal is not entirely absent: the upper tail of the field reaches 1.49 m/s
+against an ADV maximum of 1.96 m/s, so the fast, rippled water does resolve. It is
+the clear, smooth water that does not.
+
+### 12.4 What would make this survey work
+
+1. **Seed the flow.** The reference study threw biodegradable corn for exactly
+   this reason. It is the difference between a clip that works and one that does
+   not, and it costs almost nothing.
+2. **Restrict the analysis region to textured water**, the riffles and broken
+   surface, and accept lower coverage.
+3. **Survey the target already on the gravel bar.** There is a red and white
+   marker in frame at roughly UTM32N 677086, 5267944 that is not in the
+   GeoPackage. Surveyed, it becomes a genuine ground control point.
+4. **Record the takeoff elevation.** `abs_alt` is 900.7 m while the water surface
+   layer puts the reach at about 818 m, a 47 m disagreement, so `abs_alt` is
+   unusable. `rel_alt` is height above takeoff and needs an offset to become
+   height above water.
+
+### 12.5 Changes this survey drove
+
+- `geometry.mode: camera`, a telemetry-driven projective rectification
+- an SRT parser that reads multi-field brackets; the previous one silently
+  dropped `abs_alt` and all three gimbal angles
+- `depth_convention`, with the measurement height derived from a gauging depth
+  pair, and verticals grouped by position when there is no identifier column
+- `analysis.include` and `analysis.exclude` polygon masks, drawn in the viewport
+- the static-motion check and `diagnose_bias`, plus the Tier 0 calibration gate
+- streamplots that mask empty cells rather than filling them, and carry their own
+  coverage and static-motion verdict on the figure
+- a GUI rebuilt around one large viewport, with the streamplot rendered by the
+  same code that writes the exported image

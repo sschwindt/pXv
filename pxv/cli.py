@@ -81,9 +81,9 @@ def _cmd_advise(args) -> int:
 
 
 def _run_and_export(project, verbose: bool):
-    import cv2
-
     from pxv.export import datasets, streamlines
+    from pxv.io import video as video_io
+    from pxv.preprocess.enhance import crop
     from pxv.pipeline import load_frames, run
 
     result = run(project, verbose=verbose)
@@ -91,9 +91,13 @@ def _run_and_export(project, verbose: bool):
     outdir.mkdir(parents=True, exist_ok=True)
     written = []
 
-    backdrop = None
     frames, _, _ = load_frames(project, verbose=False)
-    backdrop = frames[len(frames) // 2]
+    mid = project.video.start + (len(frames) // 2) * project.video.step
+    try:
+        backdrop = video_io.read_frame(project.video.path, mid)
+        backdrop = crop(backdrop, project.video.roi)
+    except Exception:
+        backdrop = frames[len(frames) // 2]
 
     ecfg = project.export
     if ecfg.streamlines:

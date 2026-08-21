@@ -79,33 +79,33 @@ def write_world_file(path: Path, scale_m_per_px: float, origin_xy: tuple[float, 
             pass
 
 
-def plot_streamlines(
+def build_streamline_figure(
     result,
-    outpath: str | Path,
     backdrop: np.ndarray | None = None,
     cmap: str = "cividis",
     backdrop_alpha: float = 0.5,
     dpi: int = 200,
     density: float = 1.6,
     title: str | None = None,
-) -> Path:
-    """Streamlines coloured by speed over a 50 % opacity frame of the footage."""
+    figure_width_in: float = 9.0,
+):
+    """Build the streamline figure.
+
+    One renderer serves both the on-screen viewport and the exported image, so
+    what the viewport shows is exactly what gets written.
+    """
     cmap = check_cmap(cmap)
-    outpath = Path(outpath)
-    outpath.parent.mkdir(parents=True, exist_ok=True)
 
     fld = result.field
     u, v = result.velocity_world()
     speed = np.hypot(u, v)
     valid = fld.valid
 
-    # streamplot needs a complete grid; fill gaps with the local median
-    uu = np.where(valid, u, np.nan)
-    vv = np.where(valid, v, np.nan)
-    fillu = np.nanmedian(uu) if np.isfinite(uu).any() else 0.0
-    fillv = np.nanmedian(vv) if np.isfinite(vv).any() else 0.0
-    uu = np.nan_to_num(uu, nan=fillu)
-    vv = np.nan_to_num(vv, nan=fillv)
+    # Mask the gaps rather than filling them. Filling with a median makes
+    # streamlines run straight through cells that measured nothing, which turns a
+    # sparse field into a picture of a coherent flow that was never observed.
+    uu = np.ma.masked_array(np.nan_to_num(u), mask=~valid)
+    vv = np.ma.masked_array(np.nan_to_num(v), mask=~valid)
     sp = np.where(valid, speed, np.nan)
 
     gx = fld.x[0, :]
@@ -114,7 +114,7 @@ def plot_streamlines(
     h, w = (backdrop.shape[:2] if backdrop is not None
             else (int(gy[-1] + fld.cell_px), int(gx[-1] + fld.cell_px)))
 
-    fig_w = 9.0
+    fig_w = float(figure_width_in)
     fig, ax = plt.subplots(figsize=(fig_w, fig_w * h / w), dpi=dpi)
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
@@ -128,8 +128,9 @@ def plot_streamlines(
 
     vmax = float(np.nanpercentile(sp, 98)) if np.isfinite(sp).any() else 1.0
     norm = Normalize(vmin=0.0, vmax=max(vmax, 1e-9))
+    colour = np.ma.masked_array(np.nan_to_num(sp), mask=~valid)
     strm = ax.streamplot(
-        gx, gy, uu, vv, color=np.nan_to_num(sp, nan=0.0), cmap=cmap, norm=norm,
+        gx, gy, uu, vv, color=colour, cmap=cmap, norm=norm,
         density=density, linewidth=1.1, arrowsize=0.9, zorder=4,
     )
     strm.lines.set_alpha(1.0)
@@ -154,7 +155,56 @@ def plot_streamlines(
     if title:
         ax.set_title(title, fontsize=10, loc="left")
 
+    # An exported figure that hides its own unreliability is dangerous, so the
+    # health of the run travels with the image.
+    caption = [f"coverage {fld.coverage():.0%}"]
+    if np.isfinite(getattr(result, "static_fraction", np.nan)):
+        caption.append(f"static cells {result.static_fraction:.0%} "
+                       f"[{result.static_verdict}]")
+    if result.transform.mode != "none":
+        caption.append(f"geometry {result.transform.mode}")
+    note = "  |  ".join(caption)
+    warn = getattr(result, "static_verdict", "") == "suspect" or fld.coverage() < 0.5
+    ax.text(0.0, -0.012, note, transform=ax.transAxes, ha="left", va="top",
+            fontsize=7.5, color="#B23B2E" if warn else "#5C6C86")
+    if warn:
+        ax.text(1.0, -0.012,
+                "sparse or static field: treat these velocities as provisional",
+                transform=ax.transAxes, ha="right", va="top", fontsize=7.5,
+                color="#B23B2E")
+
     fig.tight_layout()
+    return fig
+
+
+def render_streamlines(result, backdrop=None, cmap="cividis", backdrop_alpha=0.5,
+                       dpi=110, density=1.6, title=None, width_in=9.0) -> np.ndarray:
+    """Rasterise the streamline figure to an RGB array for on-screen display."""
+    fig = build_streamline_figure(result, backdrop, cmap, backdrop_alpha, dpi,
+                                  density, title, width_in)
+    canvas = fig.canvas
+    canvas.draw()
+    rgba = np.asarray(canvas.buffer_rgba())
+    out = rgba[..., :3].copy()
+    plt.close(fig)
+    return out
+
+
+def plot_streamlines(
+    result,
+    outpath: str | Path,
+    backdrop: np.ndarray | None = None,
+    cmap: str = "cividis",
+    backdrop_alpha: float = 0.5,
+    dpi: int = 200,
+    density: float = 1.6,
+    title: str | None = None,
+) -> Path:
+    """Write the streamline image, with a world file when the transform allows it."""
+    outpath = Path(outpath)
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    fig = build_streamline_figure(result, backdrop, cmap, backdrop_alpha, dpi,
+                                  density, title)
     fig.savefig(outpath, format="jpeg", dpi=dpi, bbox_inches="tight",
                 facecolor="white", pil_kwargs={"quality": 92})
     plt.close(fig)
