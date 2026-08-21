@@ -1050,9 +1050,26 @@ Two candidate causes, not separable from seven points:
 The tool reports both and absorbs neither. Resolving it needs one number from the
 field: the elevation of the takeoff point.
 
-**A Tier 1 parameter search was not run.** Seven matched points, with a 30 %
-holdout leaving two for validation, cannot support a six-parameter search; the
-result would be overfitting with a validation statistic too small to detect it.
+**The Tier 1 search was run once, and its output is the argument against it.**
+Six trials over `ptv.filter_std` and `ptv.motion_neighbours` produced:
+
+| | |
+|---|---|
+| calibration | n=4, RMSE 0.236 m/s, R squared -3.4e7 |
+| validation | **n=1**, RMSE 0.057 m/s |
+| objective spread across trials | 0.846 to 0.871, about **3 %** |
+
+Validated on a single point, and the six parameter sets differ by 3 % in the
+objective, which is well inside the noise. The "best" set is whichever one
+happened to fit four points. Two guards now prevent this from being reported as a
+result: the search is refused unless at least `calibrate.min_validation_points`
+held-out points have a computed vector, and when the objective spread across
+trials is under 5 % the report says the search could not tell the parameter sets
+apart.
+
+The scale estimate is itself unstable at this coverage: **0.793** fitted on all
+matched points, **0.847** on the 70 % calibration split. So the implied
+takeoff-to-water offset is roughly -5 to -7.5 m rather than a single figure.
 Coverage has to come first.
 
 **The angular error of 32.5 degrees survives the scale fit**, as it must, since a

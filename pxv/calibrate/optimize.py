@@ -50,6 +50,9 @@ class CalibrationResult:
     z0_site: float = float("nan")
     diagnosis: str = ""
     aborted: str = ""
+    #: relative spread of the objective across trials; small means the search
+    #: could not tell the parameter sets apart
+    objective_spread: float = float("nan")
     log: list[str] = field(default_factory=list)
 
     def describe(self) -> str:
@@ -63,8 +66,18 @@ class CalibrationResult:
             f"best parameters: {self.best.params}",
             self.best.calibration.describe("calibration"),
         ]
+        if np.isfinite(self.objective_spread) and self.objective_spread < 0.05:
+            lines.append(
+                f"WARNING: objective spread {self.objective_spread:.1%} across trials; "
+                "the search did not distinguish these parameter sets"
+            )
         if self.best.validation is not None:
             lines.append(self.best.validation.describe("validation "))
+            if self.best.validation.n < 5:
+                lines.append(
+                    f"WARNING: validated on {self.best.validation.n} point(s); that "
+                    "cannot detect overfitting"
+                )
             gap = self.best.validation.rmse - self.best.calibration.rmse
             lines.append(
                 f"generalisation gap: {gap:+.4f} m/s"
@@ -160,6 +173,28 @@ def calibrate(project: Project, gt: GroundTruth, verbose: bool = False) -> Calib
         res.log.append("no Tier 1 parameters selected; stopping after the scale fit")
         return res
 
+    # A search needs enough held-out points to detect its own overfitting. With a
+    # handful of matched verticals the validation statistic is noise, and the
+    # "best" parameter set is whichever one happened to fit four points.
+    matched = int(np.isfinite(su0).sum())
+    hold_matched = 0
+    if len(hold):
+        hu, hv = sample_field(r0, gt.x[hold], gt.y[hold], radius)
+        hold_matched = int(np.isfinite(hu).sum())
+    res.log.append(
+        f"matched points: {matched} for calibration, {hold_matched} held out "
+        f"(of {len(calib)} and {len(hold)} ground-truth points)"
+    )
+    if hold_matched < ccfg.min_validation_points:
+        res.aborted = (
+            f"only {hold_matched} held-out points have a computed vector, below "
+            f"min_validation_points={ccfg.min_validation_points}. A parameter search "
+            "cannot be validated on that, so it would overfit undetectably. The limit "
+            "is coverage, not parameters: raise the measured area first."
+        )
+        res.log.append(f"Tier 1 skipped: {res.aborted}")
+        return res
+
     space = {n: SEARCH_SPACE[n] for n in names}
     trials_params = _sample_space(space, ccfg.n_trials, rng)
 
@@ -198,6 +233,18 @@ def calibrate(project: Project, gt: GroundTruth, verbose: bool = False) -> Calib
         if verbose:
             print(f"trial {k + 1}/{len(trials_params)}  J={obj:.4f}  {params}", flush=True)
 
+    if len(res.trials) >= 3:
+        values = np.array([t.objective for t in res.trials if np.isfinite(t.objective)])
+        if values.size >= 3:
+            spread = float(values.max() - values.min())
+            relative = spread / max(abs(float(np.median(values))), 1e-9)
+            res.objective_spread = relative
+            if relative < 0.05:
+                res.log.append(
+                    f"the objective varied by only {relative:.1%} across {values.size} "
+                    "trials, so the search did not distinguish the parameter sets. "
+                    "Treat the chosen values as arbitrary within that range."
+                )
     return res
 
 

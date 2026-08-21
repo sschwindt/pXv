@@ -105,3 +105,25 @@ def test_every_search_parameter_resolves_on_a_project():
         p.set(name, values[0])
         assert p.get(name) == values[0]
         p.set(name, current)
+
+
+def test_calibration_result_warns_on_a_tiny_validation_set():
+    """A search validated on one point cannot detect its own overfitting."""
+    from pxv.calibrate.optimize import CalibrationResult, Trial
+
+    cal = Comparison(n=4, rmse=0.24, bias=-0.24, mae=0.24, r2=-3e7,
+                     angular_error_deg=48.7, coverage=0.06)
+    val = Comparison(n=1, rmse=0.06, bias=-0.06, mae=0.06, r2=float("-inf"),
+                     angular_error_deg=11.6, coverage=0.03)
+    res = CalibrationResult(best=Trial({}, 0.85, cal, val), scale=0.85)
+    text = res.describe()
+    assert "cannot detect overfitting" in text
+
+
+def test_calibration_result_warns_when_trials_are_indistinguishable():
+    from pxv.calibrate.optimize import CalibrationResult, Trial
+
+    cal = Comparison(n=10, rmse=0.2, bias=0.0, mae=0.2, r2=0.5,
+                     angular_error_deg=20.0, coverage=0.4)
+    res = CalibrationResult(best=Trial({}, 0.846, cal, None), objective_spread=0.03)
+    assert "did not distinguish" in res.describe()

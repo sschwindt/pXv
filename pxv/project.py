@@ -246,6 +246,10 @@ class CalibrateCfg:
     #: Tier 1 search
     n_trials: int = 40
     holdout_fraction: float = 0.3
+    #: refuse the Tier 1 search unless at least this many held-out points have a
+    #: computed vector. Below it the validation statistic cannot detect the
+    #: overfitting the search would produce.
+    min_validation_points: int = 5
     seed: int = 0
     w_magnitude: float = 1.0
     w_direction: float = 0.5
