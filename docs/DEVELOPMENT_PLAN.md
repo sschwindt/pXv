@@ -3,12 +3,14 @@
 Mixed PIV / PTV surface velocimetry for drone and lab top-view video, with a PySide6 GUI,
 ground-truth-driven parameter calibration, and QGIS-ready mesh and streamline exports.
 
-Status: revision 5. **v0.2 implemented and run on real drone data**, see sections 11 and 12.
+Status: revision 6. **v0.3**, run on the seeded Isar window, see sections 11 to 13.
 
 Revision 2 folded in the reference workflow from `README.md` (Broß et al. 2026) and an inventory of
 the `tractracSources/` baseline. Revision 3 folded in the ground-truth measurement protocol.
 Revision 4 records what building v0.1 taught, in section 11. Revision 5 records
-what the first real drone survey taught, in section 12.
+the first pass at the Isar survey, in section 12. Revision 6, in section 13,
+records what changed once the seeded part of that clip was found: section 12's
+central conclusion was drawn from the wrong frames.
 
 ---
 
@@ -914,3 +916,117 @@ the clear, smooth water that does not.
   coverage and static-motion verdict on the figure
 - a GUI rebuilt around one large viewport, with the streamplot rendered by the
   same code that writes the exported image
+
+---
+
+## 13. The seeded window: section 12 analysed the wrong frames
+
+Section 12 concluded that the Isar clip could not yield surface velocities
+because correlation locked onto the riverbed. That conclusion was correct for the
+frames analysed and wrong about the clip. Frames 900 to 1170 sit **before** the
+tracers were injected.
+
+### 13.1 Finding the seeded window
+
+A blob census over all 3884 frames, thresholding on absolute brightness and area
+inside the water mask, puts the tracer pulse at **frames 1200 to 1700**, peaking
+1300 to 1600 at 10 to 13 tracers per frame. Outside it, 0 to 2. The lesson is
+procedural rather than technical: tracer density varies enormously along a clip,
+and a window chosen without looking measures whatever else is in the frame.
+
+This is now a routine step, not an afterthought. The seeding diagnostic reports
+`6 objects/frame -> 0.01 objects per window: too sparse for correlation, use PTV`
+on this window, which is the correct reading of a sparsely seeded scene.
+
+### 13.2 The tracers need a different detector, and different preprocessing
+
+Two changes, each necessary:
+
+**Detector.** The difference-of-Gaussian band-pass responds to sun glint and to
+the bed just as strongly as to a tracer. Thresholding on absolute brightness and
+area instead separates tracer frames from quiet frames by **26x** (8.8 versus 0.3
+detections per frame at a threshold of 0.86 and an area window of 20 to 400 px).
+Injected tracers are far brighter than anything else on the water and have a known
+physical size, so both constraints are real information.
+
+**Preprocessing.** PIV wants the background removed and the contrast stretched.
+Running a brightness threshold on that image gives **3121 false detections per
+frame**, because the stretch pushes noise to saturation. `ptv.use_raw` keeps the
+detector on the raw radiometry. The general point is that the two engines want
+different preprocessing, and the pipeline now maintains both.
+
+### 13.3 The result
+
+PTV over frames 1200 to 1700 at full frame rate:
+
+| | Section 12 window (900-1170) | Seeded window (1200-1700) |
+|---|---|---|
+| engine | PIV on natural texture | PTV on tracers |
+| vectors | 9 % yield | 2216 tracked |
+| static-motion check | 76 % static, **suspect** | 0 % static, **ok** |
+| median surface speed | 0.031 m/s | **1.63 m/s** |
+| p95 | 0.72 m/s | 2.52 m/s |
+| bias against ADV | -1.11 m/s, one-sided | ratio median **1.21** |
+| ratio spread | 63x | 14x |
+
+For reference the FlowTracker surface velocities in view run 1.0 to 2.0 m/s. Where
+a tracer cell and an ADV vertical genuinely coincide the ratios are 1.16, 1.21 and
+1.23. The scatter comes from slow near-bank verticals matched against distant
+fast-core cells, which is a **coverage** problem, not an accuracy one: the tracers
+drifted through a narrow swath, so the field covers 5 % of the water area.
+
+A median ratio of 1.21 is a plausible physical offset rather than an error.
+Tracers ride the very surface and carry some wind drag, the logarithmic
+extrapolation underestimates in the wake region near the surface, and tracers
+concentrate in the fast core. Whether the residual belongs to the geometry
+instead, through the unknown takeoff-to-water offset, is exactly what the Tier 0.5
+scale fit is for, and the two explanations are not separable from five points.
+
+### 13.4 The two engines had to be gated against each other
+
+The workflow as requested is PIV first, then correct with PTV. On this footage
+that is actively harmful if taken literally, because PIV runs on the natural
+texture, which here is the riverbed. Fusing both gave 226 bed-locked PIV cells
+beside 43 good tracer cells and pulled the median speed from 1.63 to 0.47 m/s.
+
+PIV is therefore gated on its own static-motion check. It is always computed, it
+still guides the PTV motion model **when healthy**, it is withheld from that
+guidance when not (a field predicting zero displacement biases tracer tracking
+toward standing still), and it is excluded from the fused output above
+`grid.piv_health_gate`. Every exclusion is logged.
+
+This preserves the intent of the requested workflow, PIV as the coarse predictor
+and PTV as the correction, while refusing to average a measurement with a
+non-measurement.
+
+### 13.5 The multispectral stream: co-registration works, the benefit does not
+
+`pxv.geometry.coregister` brings the second stream into the primary frame: 90 of
+145 inliers pooled over eight frames, **0.59 px median residual**. The rig is rigid
+and the gimbal locked, so one homography serves the clip. Correspondences have to
+be pooled, because a single frame pair yields only about 20 matches when the two
+renderings look nothing alike.
+
+What could not be demonstrated is that the multispectral channel improves tracer
+detection. In the F stream each tracer appears as a bright green head beside a
+dark companion, offset by 8 to 15 px, which suggests the bands are not exposed
+simultaneously. A pixel-wise combination therefore cannot work, and proximity
+matching recovered only a third of the RGB detections. The green-excess detector
+returns about 110 blobs per frame whether or not tracers are present, so on its
+own it is not selective.
+
+The co-registration is committed and available; the fusion is not claimed. The
+green-head-and-dark-companion pair may well encode the displacement between two
+band exposures directly, which would be a better use of that stream than
+thresholding it, but that is a hypothesis, not a result.
+
+### 13.6 What would raise coverage
+
+Coverage, not accuracy, is the limit at 5 %.
+
+1. **More tracer material, released across the width.** The current pulse drifts
+   down one swath of the main channel, so most of the reach has no measurement.
+2. **Repeat releases** through the clip rather than one pulse, which would also
+   let the field be time-resolved rather than pooled.
+3. **Release upstream of the ADV verticals** so that tracers pass over the
+   verticals themselves, which is where the comparison has to happen.

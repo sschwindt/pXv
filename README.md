@@ -107,6 +107,15 @@ is what happens when they sit along cross-sections, pXv reports the condition
 number and falls back to a similarity transform rather than fitting a degenerate
 homography.
 
+### A second camera stream
+
+`video.secondary_path` accepts a second stream, such as a multispectral or
+thermal payload, showing the same scene through different optics.
+`pxv.geometry.coregister` brings it into the primary image frame. The rig is
+rigid and the gimbal locked, so one homography serves the whole clip;
+correspondences are pooled across several frames because the two renderings can
+look nothing alike.
+
 ### DJI telemetry
 
 With Video Captions enabled, a Mavic 3 writes a `.SRT` sidecar next to the `.MP4`
@@ -187,6 +196,35 @@ measuring the right thing at all, and refuses to continue if it is not:
 Optimizing on top of a velocimetry failure is the failure mode the tiers exist to
 prevent: the search will find settings that fit a handful of points by chance and
 report an excellent score for a field that measures the wrong thing.
+
+### Two engines, two health checks
+
+PIV and PTV can disagree by construction. On a seeded clip, PIV runs on the
+natural texture while PTV runs on the injected tracers, and if the natural
+texture is a riverbed seen through clear water the two are measuring different
+things. So PIV's contribution is gated on its own static-motion check:
+
+- it is always computed, and it still guides the PTV motion model **when it is
+  healthy**;
+- it is withheld from that guidance when it is not, because a field predicting
+  zero displacement biases tracer tracking toward standing still;
+- it is excluded from the fused output above `grid.piv_health_gate`, because
+  fusing confident zeros beside sparse but correct tracer vectors drags the
+  median toward nothing.
+
+Every exclusion is logged, never silent.
+
+### Seeded tracers
+
+Injected tracers are far brighter than anything else on the water and have a
+known physical size, so `ptv.detector: bright` thresholds on brightness and area
+rather than using a band-pass, which responds to sun glint and to the bed just as
+strongly. `ptv.use_raw` keeps that detector on the raw radiometry: the contrast
+stretch that PIV needs pushes noise to saturation and yields thousands of false
+detections per frame.
+
+Find the seeded window before analysing: tracer density varies enormously over a
+clip, and a window chosen before injection measures only the riverbed.
 
 ### Clear water over a visible bed
 
