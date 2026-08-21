@@ -83,3 +83,28 @@ def test_static_fraction_flags_a_stationary_field():
     assert assess_static(0.8)[0] == "suspect"
     assert assess_static(0.25)[0] == "check"
     assert assess_static(0.05)[0] == "ok"
+
+
+def test_piv_health_gate_keeps_tracer_vectors_undiluted():
+    """A bed-locked PIV field must not be fused in beside good tracer vectors.
+
+    PIV that reports confident zeros would otherwise swamp a sparse but correct
+    PTV field, dragging the median velocity toward nothing.
+    """
+    from pxv.velocimetry.fuse import static_fraction
+
+    class T:
+        n = 40
+        def stacked(self):
+            x = np.full(40, 16.0)
+            y = np.full(40, 16.0)
+            return x, y, np.full(40, 9.0), np.full(40, 0.0), np.zeros(40)
+
+    dead_piv = [_piv_field(shape=(4, 4), u=0.0, v=0.0)]
+    with_piv = fuse((128, 128), 32, dead_piv, T(), min_samples=5)
+    ptv_only = fuse((128, 128), 32, None, T(), min_samples=5)
+
+    assert static_fraction(with_piv) > 0.5      # the gate would fire on this
+    assert static_fraction(ptv_only) == 0.0
+    assert np.median(with_piv.magnitude()[with_piv.valid]) < 1.0
+    assert np.median(ptv_only.magnitude()[ptv_only.valid]) == pytest.approx(9.0)

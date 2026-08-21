@@ -38,11 +38,20 @@ def test_velocities_are_physical(result):
     assert 0.0 < np.median(speed) < 0.5
 
 
-def test_both_engines_contribute(result):
+def test_ptv_contributes_and_piv_is_gated_on_its_health(result):
+    """PIV joins the output only when its own static-motion check passes.
+
+    A bed-locked PIV field would otherwise dilute good tracer vectors with
+    confident zeros, so the pipeline reports the exclusion rather than fusing it.
+    """
     from pxv.velocimetry.fuse import SOURCE_PIV, SOURCE_PTV
 
     assert (result.field.source == SOURCE_PTV).sum() > 0
-    assert (result.field.source == SOURCE_PIV).sum() > 0
+    piv_cells = int((result.field.source == SOURCE_PIV).sum())
+    gated = any("PIV excluded from the output" in line for line in result.log)
+    assert gated or piv_cells > 0
+    if gated:
+        assert piv_cells == 0
 
 
 def test_static_structures_report_near_zero_motion(result):

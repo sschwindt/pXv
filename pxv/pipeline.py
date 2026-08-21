@@ -206,10 +206,23 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
                   f"at correlation threshold {project.piv.corr_threshold}", verbose)
     timings["piv"] = time.time() - t0
 
+    # A PIV field that locked onto the bed predicts zero displacement, so seeding
+    # the tracer motion model from it would bias tracking toward standing still.
+    piv_static = float("nan")
+    if piv_fields:
+        preview = fuse_mod.fuse(proc.shape[1:], project.grid.cell_px, piv_fields, None,
+                                project.grid.min_samples)
+        piv_static = fuse_mod.static_fraction(preview)
+
     t0 = time.time()
     tracks: Tracks | None = None
     if project.ptv.enabled:
         seed = piv_fields[0] if (piv_fields and project.ptv.piv_guided) else None
+        if seed is not None and np.isfinite(piv_static) and piv_static > 0.5:
+            seed = None
+            _log(log, f"PIV guidance withheld: {piv_static:.0%} of PIV cells report no "
+                      "motion, so seeding the tracer motion model from that field would "
+                      "bias tracking toward zero", verbose)
         tracks = run_ptv(ptv_frames, project.ptv, piv_seed=seed, mask=amask,
                          progress=progress)
         _log(log, f"PTV: {tracks.n} vectors from {len(proc) - 1} frame pairs"
@@ -219,7 +232,15 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
     if not piv_fields and tracks is None:
         raise RuntimeError("both PIV and PTV are disabled; nothing to compute")
 
-    field = fuse_mod.fuse(proc.shape[1:], project.grid.cell_px, piv_fields, tracks,
+    use_piv = piv_fields
+    if (piv_fields and tracks is not None and tracks.n > 0
+            and np.isfinite(piv_static) and piv_static > project.grid.piv_health_gate):
+        use_piv = None
+        _log(log, f"PIV excluded from the output: {piv_static:.0%} of its cells report no "
+                  "motion, so fusing it would dilute the tracer vectors with confident "
+                  "zeros. PTV only", verbose)
+
+    field = fuse_mod.fuse(proc.shape[1:], project.grid.cell_px, use_piv, tracks,
                           project.grid.min_samples)
     if amask is not None:
         keep = amask[np.clip(field.y.astype(int), 0, amask.shape[0] - 1),

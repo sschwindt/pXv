@@ -192,6 +192,11 @@ class GridCfg:
     cell_px: int = 32
     #: drop cells with fewer than this many samples
     min_samples: int = 3
+    #: exclude the PIV field from the output when more than this fraction of its
+    #: cells report no motion. PIV is still computed and still guides PTV where it
+    #: is healthy, but a bed-locked field must not be fused in as if it were a
+    #: measurement: it would dilute good tracer vectors with confident zeros.
+    piv_health_gate: float = 0.5
 
 
 @dataclass
