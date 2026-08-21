@@ -84,3 +84,24 @@ def test_diagnose_all_zero_modelled():
 
     verdict, _ = diagnose_bias(np.array([1.0, 2.0, 3.0]), np.zeros(3))
     assert verdict == "failure"
+
+
+def test_unknown_calibration_parameters_are_reported_not_dropped():
+    """Silently dropping a requested parameter makes the search look broader."""
+    from pxv.calibrate.optimize import SEARCH_SPACE
+
+    assert "ptv.bright_threshold" in SEARCH_SPACE
+    assert "grid.cell_px" in SEARCH_SPACE
+
+
+def test_every_search_parameter_resolves_on_a_project():
+    """A search range that does not map to a real field would fail mid-run."""
+    from pxv.calibrate.optimize import SEARCH_SPACE
+    from pxv.project import Project
+
+    p = Project()
+    for name, values in SEARCH_SPACE.items():
+        current = p.get(name)          # raises if the path is wrong
+        p.set(name, values[0])
+        assert p.get(name) == values[0]
+        p.set(name, current)

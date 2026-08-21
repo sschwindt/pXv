@@ -1020,7 +1020,48 @@ green-head-and-dark-companion pair may well encode the displacement between two
 band exposures directly, which would be a better use of that stream than
 thresholding it, but that is a hypothesis, not a result.
 
-### 13.6 What would raise coverage
+### 13.6 Calibrating against the FlowTracker
+
+With the field now passing its own health check, the Tier 0.5 scale fit runs. Over
+frames 1250 to 1600, 7 ADV verticals have a tracer vector within 2.5 m:
+
+| | before | after one scale factor |
+|---|---|---|
+| RMSE | 0.342 m/s | **0.018 m/s** |
+| bias | +0.342 m/s | 0.000 |
+| angular error | 32.5 deg | 32.5 deg |
+
+A single global scale factor of **0.793** removes essentially the whole magnitude
+discrepancy, a twentyfold reduction in RMSE. That is the fingerprint of a scale
+error rather than a velocimetry failure, which is precisely the distinction
+`diagnose_bias` exists to draw, and it is why Tier 0.5 fits one scale alone and
+first.
+
+Two candidate causes, not separable from seven points:
+
+- **Geometry.** 0.793 x 35.21 m is 27.9 m, so a takeoff-to-water offset of
+  **-7.3 m**, meaning the aircraft launched from ground about 7 m above the water
+  surface. Plausible on a terraced gravel-bed river, and directly checkable
+  against the takeoff elevation.
+- **Physics.** Tracers ride the very surface and carry some wind drag, while the
+  logarithmic extrapolation underestimates in the wake region near the surface.
+  A 1.26 ratio in that direction is entirely ordinary.
+
+The tool reports both and absorbs neither. Resolving it needs one number from the
+field: the elevation of the takeoff point.
+
+**A Tier 1 parameter search was not run.** Seven matched points, with a 30 %
+holdout leaving two for validation, cannot support a six-parameter search; the
+result would be overfitting with a validation statistic too small to detect it.
+Coverage has to come first.
+
+**The angular error of 32.5 degrees survives the scale fit**, as it must, since a
+scale factor cannot rotate anything. The ADV bearings themselves spread from about
+60 to 150 degrees, and a 40 px cell average against a point measurement in a
+braided channel will differ. It is not a convention error, since both sides are
+easting and northing components, but it is not fully explained either.
+
+### 13.7 What would raise coverage
 
 Coverage, not accuracy, is the limit at 5 %.
 

@@ -27,6 +27,10 @@ SEARCH_SPACE = {
     "ptv.conv_size": [1.0, 2.0, 4.0, 8.0],
     "ptv.filter_std": [1.0, 1.5, 2.0, 3.0],
     "ptv.motion_neighbours": [5, 10, 20, 30],
+    "ptv.bright_threshold": [0.78, 0.82, 0.86, 0.90],
+    "ptv.min_area_px": [8, 15, 20, 30],
+    "ptv.max_displacement": [8.0, 12.0, 20.0, 30.0],
+    "grid.cell_px": [24, 32, 48, 64],
 }
 
 
@@ -144,6 +148,14 @@ def calibrate(project: Project, gt: GroundTruth, verbose: bool = False) -> Calib
 
     # ---- Tier 1 search ---------------------------------------------------
     names = [p for p in ccfg.params if p in SEARCH_SPACE]
+    unknown = [p for p in ccfg.params if p not in SEARCH_SPACE]
+    if unknown:
+        # silently dropping a requested parameter would make the search look
+        # broader than it was
+        res.log.append(
+            f"WARNING: no search range defined for {unknown}; they were not varied. "
+            f"Known parameters: {sorted(SEARCH_SPACE)}"
+        )
     if not names:
         res.log.append("no Tier 1 parameters selected; stopping after the scale fit")
         return res
@@ -196,7 +208,8 @@ def _sample_space(space: dict, n: int, rng) -> list[dict]:
         "piv.windows": [64, 64], "piv.overlap": 0.5, "piv.corr_threshold": 0.7,
         "piv.snr_threshold": 1.3, "preprocess.bg_stride": 10, "preprocess.clahe_clip": 2.0,
         "video.step": 1, "ptv.conv_size": 2.0, "ptv.filter_std": 1.5,
-        "ptv.motion_neighbours": 10,
+        "ptv.motion_neighbours": 10, "ptv.bright_threshold": 0.86,
+        "ptv.min_area_px": 20, "ptv.max_displacement": 12.0, "grid.cell_px": 40,
     }
     out = [{k: reference[k] for k in names if k in reference}]
     columns = {}
