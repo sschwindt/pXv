@@ -14,7 +14,7 @@ import numpy as np
 
 from pxv.velocimetry.piv import PIVField
 
-SOURCE_NONE, SOURCE_PIV, SOURCE_PTV, SOURCE_INTERP = 0, 1, 2, 3
+SOURCE_NONE, SOURCE_PIV, SOURCE_PTV, SOURCE_INTERP, SOURCE_PIV_CORRECTED = 0, 1, 2, 3, 4
 
 
 @dataclass
@@ -55,7 +55,9 @@ class VelocityField:
         npiv = int((self.source == SOURCE_PIV).sum())
         nptv = int((self.source == SOURCE_PTV).sum())
         nint = int((self.source == SOURCE_INTERP).sum())
-        extra = f", interpolated {nint}" if nint else ""
+        ncor = int((self.source == SOURCE_PIV_CORRECTED).sum())
+        extra = "".join([f", PIV corrected {ncor}" if ncor else "",
+                         f", interpolated {nint}" if nint else ""])
         return (
             f"field: {self.u.shape[1]}x{self.u.shape[0]} cells, coverage {self.coverage():.0%} "
             f"(measured {self.measured.mean():.0%}), "
@@ -122,6 +124,7 @@ def fuse(
     piv_fields: list[PIVField] | None,
     tracks=None,
     min_samples: int = 3,
+    piv_drop: np.ndarray | None = None,
 ) -> VelocityField:
     """Combine PIV and PTV onto one grid, preferring PTV where it has support."""
     x, y = _grid_axes(shape, cell)
@@ -135,6 +138,8 @@ def fuse(
 
     if piv_fields:
         pu, pv, pn, pgx, pgy = average_piv(piv_fields)
+        if piv_drop is not None and piv_drop.shape == pn.shape:
+            pn = np.where(piv_drop, 0, pn)
         gu, gv, gn, _, _ = bin_scatter(
             shape, cell, pgx.ravel(), pgy.ravel(),
             np.where(pn > 0, pu, np.nan).ravel(), np.where(pn > 0, pv, np.nan).ravel(),
@@ -155,6 +160,100 @@ def fuse(
     n[~np.isfinite(u)] = 0
     src[~np.isfinite(u)] = SOURCE_NONE
     return VelocityField(x=xx, y=yy, u=u, v=v, n=n, source=src, cell_px=float(cell))
+
+
+def piv_static_cells(fields: list[PIVField], threshold_px: float = 0.5,
+                     min_fraction: float = 0.6) -> np.ndarray:
+    """Per-cell test for correlation locked onto something stationary.
+
+    Bed-locking is spatial, not global: over clear water the bed wins, over
+    rippled water the surface does, and both happen in one frame. A single
+    whole-field verdict therefore throws away the cells that work. This marks a
+    cell static when it reports a displacement below ``threshold_px`` in at least
+    ``min_fraction`` of the pairs in which it produced a vector at all.
+
+    Persistence is what distinguishes the two cases. Genuinely slow water
+    fluctuates; a stationary bed does not.
+    """
+    if not fields:
+        return np.zeros((0, 0), bool)
+    mags = np.stack([np.where(f.valid, np.hypot(f.u, f.v), np.nan) for f in fields])
+    with np.errstate(invalid="ignore"):
+        n_valid = np.sum(np.isfinite(mags), axis=0)
+        n_still = np.sum(np.nan_to_num(mags, nan=np.inf) < threshold_px, axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        fraction = np.where(n_valid > 0, n_still / np.maximum(n_valid, 1), 0.0)
+    return (n_valid > 0) & (fraction >= min_fraction)
+
+
+def correct_piv_with_ptv(field: "VelocityField", min_overlap: int = 4,
+                         max_gain: float = 4.0) -> tuple["VelocityField", dict]:
+    """Rescale the PIV cells using the PTV cells that overlap them.
+
+    This is the correction step of "PIV first, then correct with PTV". PIV
+    supplies coverage and PTV supplies accuracy, so where the two coincide their
+    ratio measures how much PIV is losing, and that gain can be carried to the
+    PIV-only cells.
+
+    A single gain is fitted rather than a per-cell one: with a handful of
+    overlapping cells anything richer would fit noise. Corrected cells are tagged
+    so they are never confused with either a raw PIV or a PTV measurement.
+    """
+    report = {"overlap": 0, "gain": 1.0, "applied": 0, "reason": ""}
+    piv = field.source == SOURCE_PIV
+    ptv = field.source == SOURCE_PTV
+    if not piv.any() or not ptv.any():
+        report["reason"] = "no PIV and PTV cells to compare"
+        return field, report
+
+    # neighbouring cells count as overlapping: the two engines rarely fall in the
+    # same cell, but they do fall next to each other
+    from scipy.ndimage import binary_dilation
+
+    near_ptv = binary_dilation(ptv, np.ones((3, 3), bool))
+    both = piv & near_ptv
+    report["overlap"] = int(both.sum())
+    if both.sum() < min_overlap:
+        report["reason"] = (
+            f"only {int(both.sum())} PIV cells sit next to a PTV cell, "
+            f"below min_overlap={min_overlap}"
+        )
+        return field, report
+
+    # local PTV speed beside each overlapping PIV cell
+    from scipy.spatial import cKDTree
+
+    ptv_pts = np.column_stack([field.x[ptv], field.y[ptv]])
+    ptv_speed = np.hypot(field.u[ptv], field.v[ptv])
+    tree = cKDTree(ptv_pts)
+    target = np.column_stack([field.x[both], field.y[both]])
+    _, idx = tree.query(target, k=1)
+    reference = ptv_speed[idx]
+    modelled = np.hypot(field.u[both], field.v[both])
+
+    denom = float(np.sum(modelled * modelled))
+    if denom < 1e-12:
+        report["reason"] = "PIV reports no motion where PTV does; nothing to rescale"
+        return field, report
+    gain = float(np.sum(modelled * reference) / denom)
+    if not np.isfinite(gain) or not (1.0 / max_gain <= gain <= max_gain):
+        report["gain"] = gain
+        report["reason"] = (
+            f"gain {gain:.2f} is outside 1/{max_gain:g} to {max_gain:g}; PIV and PTV "
+            "are measuring different things, so no correction was applied"
+        )
+        return field, report
+
+    u = field.u.copy()
+    v = field.v.copy()
+    source = field.source.copy()
+    u[piv] *= gain
+    v[piv] *= gain
+    source[piv] = SOURCE_PIV_CORRECTED
+    report["gain"] = gain
+    report["applied"] = int(piv.sum())
+    return (VelocityField(x=field.x, y=field.y, u=u, v=v, n=field.n, source=source,
+                          cell_px=field.cell_px), report)
 
 
 def interpolate_gaps(field: "VelocityField", radius_px: float, power: float = 2.0,

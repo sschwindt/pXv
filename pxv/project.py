@@ -218,10 +218,17 @@ class GridCfg:
     #: cells are tagged as interpolated and never counted as measurements.
     interpolate_radius_px: float = 0.0
     interpolate_min_neighbours: int = 2
-    #: exclude the PIV field from the output when more than this fraction of its
-    #: cells report no motion. PIV is still computed and still guides PTV where it
-    #: is healthy, but a bed-locked field must not be fused in as if it were a
-    #: measurement: it would dilute good tracer vectors with confident zeros.
+    #: a PIV cell is judged bed-locked when it reports a displacement below
+    #: piv_static_threshold_px in at least piv_static_fraction of the pairs where
+    #: it produced a vector. Persistence is what separates a stationary bed from
+    #: genuinely slow water, which fluctuates.
+    piv_static_threshold_px: float = 0.5
+    piv_static_fraction: float = 0.6
+    #: rescale the surviving PIV cells using the PTV cells beside them, which is
+    #: the correction step of "PIV first, then correct with PTV"
+    correct_piv_with_ptv: bool = True
+    correction_min_overlap: int = 4
+    #: retained for projects that set it; the per-cell test above supersedes it
     piv_health_gate: float = 0.5
 
 

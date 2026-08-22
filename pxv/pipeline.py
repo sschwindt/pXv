@@ -221,23 +221,29 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
                   f"at correlation threshold {project.piv.corr_threshold}", verbose)
     timings["piv"] = time.time() - t0
 
-    # A PIV field that locked onto the bed predicts zero displacement, so seeding
-    # the tracer motion model from it would bias tracking toward standing still.
+    # Bed-locking is spatial: over clear water the bed wins, over rippled water the
+    # surface does, and both happen in one frame. Judge each PIV cell on its own
+    # rather than discarding the whole field on one verdict.
     piv_static = float("nan")
+    piv_drop = None
     if piv_fields:
-        preview = fuse_mod.fuse(proc.shape[1:], project.grid.cell_px, piv_fields, None,
-                                project.grid.min_samples)
-        piv_static = fuse_mod.static_fraction(preview)
+        piv_drop = fuse_mod.piv_static_cells(
+            piv_fields, project.grid.piv_static_threshold_px,
+            project.grid.piv_static_fraction)
+        alive = piv_fields[0].valid.size - int(piv_drop.sum())
+        piv_static = float(piv_drop.sum()) / max(piv_drop.size, 1)
+        _log(log, f"PIV per-cell health: {int(piv_drop.sum())} of {piv_drop.size} cells "
+                  f"are persistently static and were dropped; {alive} kept", verbose)
 
     t0 = time.time()
     tracks: Tracks | None = None
     if project.ptv.enabled:
         seed = piv_fields[0] if (piv_fields and project.ptv.piv_guided) else None
-        if seed is not None and np.isfinite(piv_static) and piv_static > 0.5:
+        if seed is not None and np.isfinite(piv_static) and piv_static > 0.9:
             seed = None
-            _log(log, f"PIV guidance withheld: {piv_static:.0%} of PIV cells report no "
-                      "motion, so seeding the tracer motion model from that field would "
-                      "bias tracking toward zero", verbose)
+            _log(log, f"PIV guidance withheld: {piv_static:.0%} of PIV cells are "
+                      "persistently static, so seeding the tracer motion model from that "
+                      "field would bias tracking toward zero", verbose)
         tracks = run_ptv(ptv_frames, project.ptv, piv_seed=seed, mask=amask,
                          progress=progress)
         _log(log, f"PTV: {tracks.n} vectors from {len(proc) - 1} frame pairs"
@@ -247,16 +253,20 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
     if not piv_fields and tracks is None:
         raise RuntimeError("both PIV and PTV are disabled; nothing to compute")
 
-    use_piv = piv_fields
-    if (piv_fields and tracks is not None and tracks.n > 0
-            and np.isfinite(piv_static) and piv_static > project.grid.piv_health_gate):
-        use_piv = None
-        _log(log, f"PIV excluded from the output: {piv_static:.0%} of its cells report no "
-                  "motion, so fusing it would dilute the tracer vectors with confident "
-                  "zeros. PTV only", verbose)
+    field = fuse_mod.fuse(proc.shape[1:], project.grid.cell_px, piv_fields, tracks,
+                          project.grid.min_samples, piv_drop=piv_drop)
 
-    field = fuse_mod.fuse(proc.shape[1:], project.grid.cell_px, use_piv, tracks,
-                          project.grid.min_samples)
+    # "PIV first, then correct with PTV": PIV supplies coverage, PTV supplies
+    # accuracy, and where they coincide their ratio carries to the PIV-only cells.
+    if project.grid.correct_piv_with_ptv and piv_fields and tracks is not None:
+        field, corr = fuse_mod.correct_piv_with_ptv(
+            field, min_overlap=project.grid.correction_min_overlap)
+        if corr["applied"]:
+            _log(log, f"PIV corrected with PTV: gain {corr['gain']:.3f} from "
+                      f"{corr['overlap']} overlapping cells, applied to "
+                      f"{corr['applied']} PIV cells", verbose)
+        else:
+            _log(log, f"PIV not corrected: {corr['reason']}", verbose)
     if amask is not None:
         keep = amask[np.clip(field.y.astype(int), 0, amask.shape[0] - 1),
                      np.clip(field.x.astype(int), 0, amask.shape[1] - 1)]

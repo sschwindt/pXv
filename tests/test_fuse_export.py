@@ -176,3 +176,100 @@ def test_static_fraction_ignores_interpolated_cells():
     field = fuse((256, 320), 16, None, _scatter_track(), min_samples=1)
     filled = interpolate_gaps(field, radius_px=40.0)
     assert static_fraction(filled) == static_fraction(field)
+
+
+def _piv_series(n=10, shape=(6, 6), moving_cols=3):
+    """A PIV time series where some cells move and the rest never do.
+
+    Bed-locking is spatial: over clear water the bed wins, over rippled water the
+    surface does, and both happen in one frame.
+    """
+    rng = np.random.default_rng(7)
+    out = []
+    for _ in range(n):
+        u = np.zeros(shape, np.float32)
+        v = np.zeros(shape, np.float32)
+        u[:, :moving_cols] = 4.0 + rng.normal(0, 0.2, (shape[0], moving_cols))
+        v[:, :moving_cols] = -1.0
+        # the static half jitters at the noise floor, never beyond it
+        u[:, moving_cols:] = rng.normal(0, 0.05, (shape[0], shape[1] - moving_cols))
+        xs = np.arange(shape[1]) * 32.0 + 16
+        ys = np.arange(shape[0]) * 32.0 + 16
+        xx, yy = np.meshgrid(xs, ys)
+        out.append(PIVField(x=xx, y=yy, u=u, v=v, corr=np.full(shape, 0.9),
+                            snr=np.full(shape, 5.0), valid=np.ones(shape, bool)))
+    return out
+
+
+def test_per_cell_static_test_keeps_the_moving_half():
+    """A single whole-field verdict throws away the cells that work."""
+    from pxv.velocimetry.fuse import piv_static_cells
+
+    drop = piv_static_cells(_piv_series(), threshold_px=0.5, min_fraction=0.6)
+    assert not drop[:, :3].any()      # moving cells kept
+    assert drop[:, 3:].all()          # persistently static cells dropped
+
+
+def test_per_cell_static_test_keeps_fluctuating_slow_water():
+    """Genuinely slow water fluctuates; a stationary bed does not."""
+    from pxv.velocimetry.fuse import piv_static_cells
+
+    rng = np.random.default_rng(2)
+    fields = []
+    for _ in range(10):
+        u = np.abs(rng.normal(0.6, 0.5, (4, 4))).astype(np.float32)
+        xs = np.arange(4) * 32.0 + 16
+        xx, yy = np.meshgrid(xs, xs)
+        fields.append(PIVField(x=xx, y=yy, u=u, v=np.zeros((4, 4), np.float32),
+                               corr=np.full((4, 4), 0.9), snr=np.full((4, 4), 5.0),
+                               valid=np.ones((4, 4), bool)))
+    drop = piv_static_cells(fields, threshold_px=0.5, min_fraction=0.6)
+    assert drop.mean() < 0.5
+
+
+def test_ptv_correction_rescales_piv():
+    """Where the two engines coincide, their ratio carries to the PIV-only cells."""
+    from pxv.velocimetry.fuse import SOURCE_PIV_CORRECTED, correct_piv_with_ptv
+
+    class T:
+        n = 30
+        def stacked(self):
+            x = np.full(30, 48.0)
+            y = np.full(30, 48.0)
+            return x, y, np.full(30, 8.0), np.full(30, 0.0), np.zeros(30)
+
+    field = fuse((192, 192), 32, [_piv_field(shape=(6, 6), u=4.0, v=0.0)], T(),
+                 min_samples=5)
+    out, report = correct_piv_with_ptv(field, min_overlap=1)
+    assert report["applied"] > 0
+    assert report["gain"] == pytest.approx(2.0, rel=0.05)
+    assert (out.source == SOURCE_PIV_CORRECTED).any()
+    corrected = out.source == SOURCE_PIV_CORRECTED
+    assert np.allclose(np.hypot(out.u[corrected], out.v[corrected]), 8.0, rtol=0.05)
+
+
+def test_ptv_correction_refuses_an_implausible_gain():
+    """A gain far from one means the engines are measuring different things."""
+    from pxv.velocimetry.fuse import correct_piv_with_ptv
+
+    class T:
+        n = 30
+        def stacked(self):
+            x = np.full(30, 48.0)
+            y = np.full(30, 48.0)
+            return x, y, np.full(30, 400.0), np.full(30, 0.0), np.zeros(30)
+
+    field = fuse((192, 192), 32, [_piv_field(shape=(6, 6), u=1.0, v=0.0)], T(),
+                 min_samples=5)
+    out, report = correct_piv_with_ptv(field, min_overlap=1, max_gain=4.0)
+    assert report["applied"] == 0
+    assert "outside" in report["reason"]
+
+
+def test_ptv_correction_needs_enough_overlap():
+    from pxv.velocimetry.fuse import correct_piv_with_ptv
+
+    field = fuse((192, 192), 32, [_piv_field(shape=(6, 6), u=4.0, v=0.0)], None)
+    out, report = correct_piv_with_ptv(field, min_overlap=4)
+    assert report["applied"] == 0
+    assert "no PIV and PTV cells" in report["reason"]
