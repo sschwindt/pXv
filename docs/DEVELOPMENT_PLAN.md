@@ -1146,7 +1146,75 @@ deviation a noisy rejection statistic. Together: 99 measured cells against 56,
 2298 vectors against 2216, and uncalibrated RMSE against the ADV of 0.18 m/s
 against 0.34 m/s.
 
-### 13.10 What would raise coverage
+### 13.10 Where PIV belongs: on top, judged cell by cell
+
+The global PIV health gate of section 13.4 was wrong in kind, and the correction
+matters more than the original.
+
+**Bed-locking is spatial, not global.** Over clear water the bed wins the
+correlation; over rippled water the surface does; and both happen in the same
+frame. A single whole-field verdict therefore discards the cells that work.
+Measured over the seeded window with the four-stage chain and a 64 px window at
+every frame:
+
+| | |
+|---|---|
+| PIV cells producing vectors | 808 |
+| cells with persistent motion above 0.5 px | **463 (57 %)** |
+| their median speed | 0.91 m/s |
+| their p90 | 1.68 m/s |
+
+Against a FlowTracker range of 1.0 to 2.0 m/s, that is a usable field, and the
+gate was throwing away 57 % of it. At a frame step of 3 only 281 cells survive,
+because the larger displacement pushes more windows past the correlation limit, so
+step 1 is the right choice here.
+
+**So the layering is what was asked for all along.** PIV runs the four-stage chain
+and supplies coverage; PTV runs on the raw radiometry and supplies accuracy;
+where they coincide, their ratio corrects the PIV-only cells.
+
+- `piv_static_cells` marks a cell bed-locked when it reports a displacement below
+  `grid.piv_static_threshold_px` in at least `grid.piv_static_fraction` of the
+  pairs in which it produced a vector. Persistence is the discriminator:
+  genuinely slow water fluctuates, a stationary bed does not, and a test asserts
+  that slow water survives.
+- `correct_piv_with_ptv` fits **one** gain from the PIV cells adjacent to a PTV
+  cell and applies it to the PIV-only cells, tagging them `piv_corrected`. One
+  gain rather than a per-cell field, because a handful of overlapping cells
+  cannot support anything richer. A gain outside 1/4 to 4 is refused as evidence
+  that the two engines are measuring different things rather than the same thing
+  at different fidelity.
+
+The earlier binary gate survives only as a fallback for the case where almost
+every PIV cell is static, which is what frames 900 to 1170 actually were.
+
+**The layered run, frames 1250 to 1650.** PIV yield 47 %, 436 of 1888 cells
+dropped as persistently static, PTV 2061 vectors, and the correction gain fitted
+at **1.442** from 81 overlapping cells and applied to 458 PIV cells.
+
+| | PTV only | PIV corrected by PTV |
+|---|---|---|
+| measured coverage | 5 % | **27 %** |
+| rendered with gap filling | 14 % | 38 % |
+| ADV points matched | 7 | **17** |
+| RMSE against ADV | **0.18 m/s** | 0.49 m/s |
+| bias | +0.18 | -0.38 |
+| ratio spread | 14x | 30x |
+
+That is the trade honestly stated: **PIV buys about five times the coverage at
+about three times the error.** The two are not interchangeable and the pipeline
+does not pretend otherwise. Every cell carries its provenance, so a `source`
+filter on the exported GeoPackage selects `ptv` for the accurate subset or keeps
+`piv_corrected` for the full field.
+
+The residual negative bias points at the remaining weakness. A cell only partly
+influenced by the bed reports a reduced but non-zero displacement, passes a
+threshold test built on persistence, and is biased low. The correction gain of
+1.44 is compensating for exactly that, globally rather than where it occurs. A
+sharper per-cell discriminator, using the correlation value or the temporal
+structure rather than the displacement alone, is the next thing worth building.
+
+### 13.11 What would raise coverage
 
 Coverage, not accuracy, is the limit at 5 %.
 

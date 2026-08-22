@@ -3,8 +3,8 @@ video:
   path: examples/isar-20260804/DJI_20260804150234_0002_D.MP4
   # the tracer pulse: a blob census over the whole clip puts it at frames
   # 1200-1700, peaking 1300-1600 at 10-13 tracers per frame over the water
-  start: 1200
-  stop: 1700
+  start: 1250
+  stop: 1650
   step: 1            # every frame: twice the tracked pairs
   secondary_path: examples/isar-20260804/DJI_20260804150234_0002_F.MP4
   fps: 0.0           # read from the container
@@ -57,15 +57,18 @@ geometry:
   orthophoto: ''
   scale_correction: 1.0
 piv:
+  # PIV supplies coverage on the natural surface texture. Judged cell by cell:
+  # over clear water the bed wins the correlation, over rippled water the surface
+  # does, and both happen in the same frame.
   enabled: true
-  windows: [128, 64]
+  windows: [64]
   overlap: 0.5
-  corr_threshold: 0.5
+  corr_threshold: 0.4
   snr_method: peak2rms
   snr_exclusion_px: 5
-  snr_threshold: 3.0
+  snr_threshold: 2.5
   subpixel: gaussian
-  min_texture: 0.02
+  min_texture: 0.005
   median_threshold: 2.0
   fill: true
 ptv:
@@ -102,8 +105,13 @@ grid:
   # a streamline cannot step from one cell to the next, and a real measurement
   # renders as a handful of stubs. Filled cells are tagged and never counted as
   # measurements.
-  interpolate_radius_px: 90.0
+  interpolate_radius_px: 70.0
   interpolate_min_neighbours: 2
+  # per-cell bed-lock test, and the PTV correction applied to what survives
+  piv_static_threshold_px: 0.5
+  piv_static_fraction: 0.6
+  correct_piv_with_ptv: true
+  correction_min_overlap: 4
   piv_health_gate: 0.5
 groundtruth:
   path: examples/isar-20260804/IsarAug2026.gpkg

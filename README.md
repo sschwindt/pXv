@@ -201,22 +201,29 @@ Optimizing on top of a velocimetry failure is the failure mode the tiers exist t
 prevent: the search will find settings that fit a handful of points by chance and
 report an excellent score for a field that measures the wrong thing.
 
-### Two engines, two health checks
+### PIV for coverage, PTV for accuracy
 
-PIV and PTV can disagree by construction. On a seeded clip, PIV runs on the
-natural texture while PTV runs on the injected tracers, and if the natural
-texture is a riverbed seen through clear water the two are measuring different
-things. So PIV's contribution is gated on its own static-motion check:
+The two engines do different jobs and the pipeline treats them that way. PIV runs
+the four-stage chain on the natural surface texture and covers the whole water
+area. PTV runs on the raw radiometry and follows the injected tracers, which is
+far more accurate but only where tracers went. So PIV goes on top and PTV
+corrects it.
 
-- it is always computed, and it still guides the PTV motion model **when it is
-  healthy**;
-- it is withheld from that guidance when it is not, because a field predicting
-  zero displacement biases tracer tracking toward standing still;
-- it is excluded from the fused output above `grid.piv_health_gate`, because
-  fusing confident zeros beside sparse but correct tracer vectors drags the
-  median toward nothing.
+**Bed-locking is spatial, not global.** Over clear water the bed wins the
+correlation; over rippled water the surface does; and both happen in the same
+frame. Each PIV cell is therefore judged on its own: a cell is dropped when it
+reports a displacement below `grid.piv_static_threshold_px` in at least
+`grid.piv_static_fraction` of the pairs where it produced a vector at all.
+Persistence is what separates a stationary bed from genuinely slow water, which
+fluctuates.
 
-Every exclusion is logged, never silent.
+**Then PTV corrects what survives.** `correct_piv_with_ptv` fits one gain from the
+PIV cells adjacent to a PTV cell and applies it to the PIV-only cells, tagging
+them `piv_corrected`. A single gain rather than a per-cell one, because a handful
+of overlapping cells cannot support anything richer, and a gain outside 1/4 to 4
+is refused as evidence that the two engines are measuring different things.
+
+Every drop, correction and refusal is logged, never silent.
 
 ### Sparse fields and streamlines
 
