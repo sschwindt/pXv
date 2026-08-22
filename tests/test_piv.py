@@ -125,3 +125,34 @@ def test_piv_pair_carries_zero_lag(particle_pair):
     f = piv_pair(a, b, PIVCfg(windows=[64], overlap=0.5))
     assert f.zero_lag is not None
     assert f.zero_lag.shape == f.u.shape
+
+
+def test_zero_lag_suppression_is_an_artefact_not_a_fix():
+    """Masking the zero-lag peak pins the answer at the exclusion radius.
+
+    It is tempting, because a stationary bed puts its peak at zero lag and removing
+    it appears to reveal the surface underneath. It does not: with no real peak
+    outside the mask the search returns whatever sits just past the radius, so the
+    reported displacement stops depending on the frame interval.
+
+    On the seeded Isar window the measured displacements were 3.64, 3.50, 3.53 and
+    3.52 px at frame steps 1, 2, 3 and 4. Real motion would have scaled with the
+    interval. pXv therefore does not offer the option, and this test records why.
+    """
+    w = 64
+    yy, xx = np.mgrid[0:w, 0:w]
+    # a plane containing only a stationary component, as a bed-dominated window gives
+    plane = np.exp(-((yy - 32) ** 2 + (xx - 32) ** 2) / (2 * 2.5 ** 2)).astype(np.float32)
+
+    recovered = []
+    for exclusion in (2, 3, 4):
+        masked = plane.copy()
+        near = (np.abs(yy - 32) <= exclusion) & (np.abs(xx - 32) <= exclusion)
+        masked[near] = -np.inf
+        du, dv, *_ = peak_find(masked[None, None])
+        recovered.append(float(np.hypot(du[0, 0], dv[0, 0])))
+
+    # the answer tracks the exclusion radius, which is the signature of the artefact
+    assert recovered[0] < recovered[1] < recovered[2]
+    for r, exclusion in zip(recovered, (2, 3, 4)):
+        assert abs(r - (exclusion + 1)) < 1.5

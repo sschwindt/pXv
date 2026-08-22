@@ -1214,7 +1214,70 @@ threshold test built on persistence, and is biased low. The correction gain of
 sharper per-cell discriminator, using the correlation value or the temporal
 structure rather than the displacement alone, is the next thing worth building.
 
-### 13.11 What would raise coverage
+### 13.11 The sharper discriminator: built, tested, and it did not move the bias
+
+The residual low bias of section 13.10 was attributed to cells only partly
+influenced by the bed. The remedy proposed was a discriminator using temporal
+structure rather than displacement magnitude. It was built, and reporting what
+happened is more useful than the code.
+
+**What was built.** Each PIV cell is classified from the time history of its own
+vectors: *clean* when nearly every pair gives a moving vector, *static* when
+nearly none do, and *mixed* when it alternates, which is correlation locking onto
+the bed in some pairs and onto the surface in others. Mixed cells are then
+estimated from their moving samples alone, because a median over both populations
+lands between them and reports a speed that was never observed. A unit test
+confirms the mechanism exactly: on a synthetic cell alternating between 4.0 px and
+0.0 px, the plain median returns under 0.6x the true speed and the
+moving-population estimator recovers it to 2 %.
+
+`peak_find` also now returns the correlation at zero lag, which is the direct
+fingerprint of a stationary pattern.
+
+**What happened on the real data.**
+
+| | before | after |
+|---|---|---|
+| RMSE against ADV | 0.487 m/s | 0.490 m/s |
+| bias | -0.378 | -0.383 |
+| ratio spread | 30x | **19x** |
+| measured coverage | 27 % | 29 % |
+
+The bias did not move. The ratio spread tightened, which is worth having, but the
+central claim of section 13.10 was wrong.
+
+**Why, and this is the useful part.** The new zero-lag diagnostic explains it:
+
+```
+zero-lag/peak correlation, clean  cells: median 0.79
+zero-lag/peak correlation, mixed  cells: median 1.00
+zero-lag/peak correlation, static cells: median 1.00
+```
+
+Even cells classified **clean** carry 0.79 of their peak correlation at zero lag.
+The bed is not confined to a subset of cells that a classifier could separate out;
+it is present in nearly every window in the frame. The problem is therefore not
+sample selection, which is what the classifier addresses, but contamination inside
+each individual correlation plane, where the summed response of a static and a
+moving pattern places its peak between the two. No choice among samples can undo
+that, because every sample is already pulled.
+
+**And the obvious remedy is still an artefact.** Suppressing the zero-lag peak was
+rejected in section 12.3 on the pre-tracer frames. It was re-tested here on the
+seeded window, where a real moving signal exists, using the same falsification
+test. Displacement with a two-pixel exclusion, at frame steps 1, 2, 3 and 4:
+**3.64, 3.50, 3.53, 3.52 px.** Real motion scales with the interval; this does not.
+The rejection stands, now verified on the right data, and a regression test records
+the mechanism.
+
+**What this means for the survey.** Where the bed shows through, PIV cannot
+recover the surface velocity, and no post-processing changes that. The PTV subset
+is the trustworthy measurement; the PIV subset buys roughly five times the coverage
+carrying a known low bias that the global PTV gain corrects in aggregate but not
+where it occurs. Both are exported with their provenance. The lever is seeding
+density, not the algorithm.
+
+### 13.12 What would raise coverage
 
 Coverage, not accuracy, is the limit at 5 %.
 

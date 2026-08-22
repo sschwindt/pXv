@@ -217,6 +217,19 @@ reports a displacement below `grid.piv_static_threshold_px` in at least
 Persistence is what separates a stationary bed from genuinely slow water, which
 fluctuates.
 
+PIV cells are classified from the temporal structure of their own vectors, because
+a displacement threshold cannot separate a stationary bed from genuinely slow
+water: both report small numbers, and what separates them is whether the small
+numbers persist. Cells that alternate between the two are estimated from their
+moving samples alone, since a median over both populations reports a speed that
+was never observed.
+
+`peak_find` also returns the correlation at zero lag, the direct fingerprint of a
+stationary pattern, and the run logs it per cell class. On the Isar clip even
+*clean* cells sit at 0.79, meaning the bed contaminates nearly every window rather
+than a separable subset. Where that is true, PIV cannot recover the surface
+velocity and no post-processing changes it: the lever is seeding density.
+
 **Then PTV corrects what survives.** `correct_piv_with_ptv` fits one gain from the
 PIV cells adjacent to a PTV cell and applies it to the PIV-only cells, tagging
 them `piv_corrected`. A single gain rather than a per-cell one, because a handful
