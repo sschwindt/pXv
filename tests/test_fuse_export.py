@@ -273,3 +273,92 @@ def test_ptv_correction_needs_enough_overlap():
     out, report = correct_piv_with_ptv(field, min_overlap=4)
     assert report["applied"] == 0
     assert "no PIV and PTV cells" in report["reason"]
+
+
+def _series_from_speeds(speeds_per_cell, shape=(2, 2)):
+    """Build a PIV series where each cell has a prescribed |d| time history."""
+    n = len(next(iter(speeds_per_cell.values())))
+    xs = np.arange(shape[1]) * 32.0 + 16
+    ys = np.arange(shape[0]) * 32.0 + 16
+    xx, yy = np.meshgrid(xs, ys)
+    fields = []
+    for k in range(n):
+        u = np.zeros(shape, np.float32)
+        for (j, i), series in speeds_per_cell.items():
+            u[j, i] = series[k]
+        fields.append(PIVField(x=xx, y=yy, u=u, v=np.zeros(shape, np.float32),
+                               corr=np.full(shape, 0.9), snr=np.full(shape, 5.0),
+                               valid=np.ones(shape, bool)))
+    return fields
+
+
+def test_classifier_separates_clean_mixed_and_static():
+    """A displacement threshold alone cannot separate a bed from slow water."""
+    from pxv.velocimetry.fuse import (
+        CELL_CLEAN, CELL_MIXED, CELL_STATIC, classify_piv_cells,
+    )
+
+    n = 20
+    fields = _series_from_speeds({
+        (0, 0): [4.0] * n,                            # clean: always moving
+        (0, 1): [4.0, 0.0] * (n // 2),                # mixed: alternates
+        (1, 0): [0.0] * n,                            # static: never moves
+        (1, 1): [0.3] * n,                            # slow but persistent
+    })
+    cls, diag = classify_piv_cells(fields, threshold_px=0.5)
+    assert cls[0, 0] == CELL_CLEAN
+    assert cls[0, 1] == CELL_MIXED
+    assert cls[1, 0] == CELL_STATIC
+    assert cls[1, 1] == CELL_STATIC        # consistently slow, not alternating
+    assert diag["counts"]["mixed"] == 1
+
+
+def test_moving_population_estimator_removes_the_low_bias():
+    """A median over both populations reports a speed that was never observed."""
+    from pxv.velocimetry.fuse import average_piv, average_piv_moving, classify_piv_cells
+
+    n = 20
+    truth = 4.0
+    fields = _series_from_speeds({
+        (0, 0): [truth] * n,
+        (0, 1): [truth, 0.0] * (n // 2),   # half the pairs lock onto the bed
+        (1, 0): [0.0] * n,
+        (1, 1): [truth] * n,
+    })
+    cls, _ = classify_piv_cells(fields, threshold_px=0.5)
+
+    plain_u, *_ = average_piv(fields)
+    moving_u, _, n_used, _, _ = average_piv_moving(fields, cls, threshold_px=0.5)
+
+    # the plain median lands between the two populations
+    assert plain_u[0, 1] < 0.6 * truth
+    # the moving-population estimate recovers the surface value
+    assert moving_u[0, 1] == pytest.approx(truth, rel=0.02)
+    assert n_used[0, 1] == n // 2
+    # clean cells are unaffected, static cells are dropped
+    assert moving_u[0, 0] == pytest.approx(truth)
+    assert n_used[1, 0] == 0
+
+
+def test_mixed_cells_with_too_few_moving_samples_are_dropped():
+    from pxv.velocimetry.fuse import average_piv_moving, classify_piv_cells
+
+    series = [4.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0]
+    fields = _series_from_speeds({(0, 0): series, (0, 1): [4.0] * len(series),
+                                  (1, 0): [4.0] * len(series),
+                                  (1, 1): [4.0] * len(series)})
+    cls, _ = classify_piv_cells(fields, threshold_px=0.5, moving_min=0.2)
+    _, _, n_used, _, _ = average_piv_moving(fields, cls, threshold_px=0.5, min_moving=3)
+    assert n_used[0, 0] == 0        # only two moving samples, below min_moving
+
+
+def test_zero_lag_ratio_reported_when_available():
+    from pxv.velocimetry.fuse import classify_piv_cells
+
+    fields = _series_from_speeds({(0, 0): [4.0] * 6, (0, 1): [4.0] * 6,
+                                  (1, 0): [4.0] * 6, (1, 1): [4.0] * 6})
+    for f in fields:
+        f.zero_lag = np.full(f.u.shape, 0.45, np.float32)
+    _, diag = classify_piv_cells(fields, threshold_px=0.5)
+    assert "zero_lag_ratio" in diag
+    assert np.allclose(diag["zero_lag_ratio"], 0.5, atol=1e-3)

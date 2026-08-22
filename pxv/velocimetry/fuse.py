@@ -125,6 +125,8 @@ def fuse(
     tracks=None,
     min_samples: int = 3,
     piv_drop: np.ndarray | None = None,
+    piv_classes: np.ndarray | None = None,
+    piv_threshold_px: float = 0.5,
 ) -> VelocityField:
     """Combine PIV and PTV onto one grid, preferring PTV where it has support."""
     x, y = _grid_axes(shape, cell)
@@ -137,7 +139,11 @@ def fuse(
     src = np.zeros((ny, nx), np.uint8)
 
     if piv_fields:
-        pu, pv, pn, pgx, pgy = average_piv(piv_fields)
+        if piv_classes is not None:
+            pu, pv, pn, pgx, pgy = average_piv_moving(piv_fields, piv_classes,
+                                                      piv_threshold_px)
+        else:
+            pu, pv, pn, pgx, pgy = average_piv(piv_fields)
         if piv_drop is not None and piv_drop.shape == pn.shape:
             pn = np.where(piv_drop, 0, pn)
         gu, gv, gn, _, _ = bin_scatter(
@@ -160,6 +166,107 @@ def fuse(
     n[~np.isfinite(u)] = 0
     src[~np.isfinite(u)] = SOURCE_NONE
     return VelocityField(x=xx, y=yy, u=u, v=v, n=n, source=src, cell_px=float(cell))
+
+
+CELL_CLEAN, CELL_MIXED, CELL_STATIC, CELL_EMPTY = 0, 1, 2, 3
+CELL_NAMES = ("clean", "mixed", "static", "empty")
+
+
+def classify_piv_cells(fields: list[PIVField], threshold_px: float = 0.5,
+                       moving_min: float = 0.25, clean_min: float = 0.85):
+    """Classify each PIV cell from the temporal structure of its own vectors.
+
+    A displacement threshold alone cannot separate a stationary bed from genuinely
+    slow water: both report small numbers. What separates them is *how* they
+    report them over time.
+
+    - **clean**: nearly every pair gives a moving vector. The surface won.
+    - **static**: nearly every pair gives a stationary vector. Either a bed seen
+      through clear water, or a genuinely still corner.
+    - **mixed**: the cell alternates. Correlation is locking onto the bed in some
+      pairs and onto the surface in others, because the two compete inside the
+      same window.
+
+    Mixed cells are the source of the low bias. Taking a median over all their
+    samples averages true surface velocities together with bed zeros and lands
+    between the two, so the cell reports a speed that was never observed. The
+    remedy is not to drop them, which costs coverage, but to estimate them from
+    their moving samples alone. See :func:`average_piv_moving`.
+
+    Returns ``(classification, diagnostics)``.
+    """
+    if not fields:
+        return np.zeros((0, 0), np.uint8), {}
+    mags = np.stack([np.where(f.valid, np.hypot(f.u, f.v), np.nan) for f in fields])
+    finite = np.isfinite(mags)
+    n_valid = finite.sum(axis=0)
+    with np.errstate(invalid="ignore"):
+        n_moving = np.sum(np.nan_to_num(mags, nan=-1.0) >= threshold_px, axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        moving_fraction = np.where(n_valid > 0, n_moving / np.maximum(n_valid, 1), 0.0)
+
+    cls = np.full(n_valid.shape, CELL_EMPTY, np.uint8)
+    has = n_valid > 0
+    cls[has & (moving_fraction >= clean_min)] = CELL_CLEAN
+    cls[has & (moving_fraction >= moving_min) & (moving_fraction < clean_min)] = CELL_MIXED
+    cls[has & (moving_fraction < moving_min)] = CELL_STATIC
+
+    diagnostics = {
+        "moving_fraction": moving_fraction,
+        "n_valid": n_valid,
+        "counts": {name: int((cls == i).sum()) for i, name in enumerate(CELL_NAMES)},
+    }
+    # zero-lag correlation, where the engine reported it: the direct fingerprint
+    # of a stationary pattern competing inside the window
+    zl = [f for f in fields if f.zero_lag is not None]
+    if zl:
+        ratio = np.stack([
+            np.where(f.valid & (f.corr > 1e-6), f.zero_lag / np.maximum(f.corr, 1e-6), np.nan)
+            for f in zl
+        ])
+        with np.errstate(invalid="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            diagnostics["zero_lag_ratio"] = np.nanmedian(ratio, axis=0)
+    return cls, diagnostics
+
+
+def average_piv_moving(fields: list[PIVField], classification: np.ndarray,
+                       threshold_px: float = 0.5, min_moving: int = 3):
+    """Time-median of the PIV series, using only the moving samples in mixed cells.
+
+    In a clean cell every sample is a surface measurement, so the plain median is
+    right. In a mixed cell the samples are drawn from two populations, the surface
+    and the bed, and the median sits between them. Selecting the moving population
+    recovers what the surface was doing, at the cost of assuming the near-zero
+    samples are the bed rather than the flow briefly stopping.
+
+    That assumption is exactly what the classifier established: a cell only
+    reaches ``mixed`` because it *also* produces clearly moving vectors.
+    """
+    if not fields:
+        raise ValueError("no PIV fields to average")
+    us = np.stack([np.where(f.valid, f.u, np.nan) for f in fields])
+    vs = np.stack([np.where(f.valid, f.v, np.nan) for f in fields])
+    mags = np.hypot(us, vs)
+
+    select = np.isfinite(us)
+    mixed = classification == CELL_MIXED
+    if mixed.any():
+        moving = np.nan_to_num(mags, nan=-1.0) >= threshold_px
+        select = np.where(mixed[None, :, :], select & moving, select)
+
+    keep_u = np.where(select, us, np.nan)
+    keep_v = np.where(select, vs, np.nan)
+    with np.errstate(invalid="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        u = np.nanmedian(keep_u, axis=0)
+        v = np.nanmedian(keep_v, axis=0)
+    n = np.sum(select, axis=0).astype(np.int32)
+
+    drop = (classification == CELL_STATIC) | (classification == CELL_EMPTY)
+    drop |= (classification == CELL_MIXED) & (n < min_moving)
+    n = np.where(drop, 0, n)
+    return u.astype(np.float32), v.astype(np.float32), n, fields[0].x, fields[0].y
 
 
 def piv_static_cells(fields: list[PIVField], threshold_px: float = 0.5,

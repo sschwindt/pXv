@@ -42,8 +42,8 @@ def test_snr_peak2rms_beats_peak2peak_on_broad_peaks(rng):
     yy, xx = np.mgrid[0:64, 0:64]
     broad = np.exp(-((yy - 32) ** 2 + (xx - 32) ** 2) / (2 * 8.0 ** 2)).astype(np.float32)
     planes = broad[None, None]
-    _, _, _, snr_pp = peak_find(planes, snr_method="peak2peak", exclusion_px=2)
-    _, _, _, snr_rms = peak_find(planes, snr_method="peak2rms", exclusion_px=5)
+    *_, snr_pp, _ = peak_find(planes, snr_method="peak2peak", exclusion_px=2)
+    *_, snr_rms, _ = peak_find(planes, snr_method="peak2rms", exclusion_px=5)
     assert snr_pp[0, 0] < 1.1
     assert snr_rms[0, 0] > 2.0
 
@@ -97,3 +97,31 @@ def test_stage_metrics_detect_saturation():
     varied = rng.random((64, 64)).astype(np.float32)
     assert stage_metrics(varied)["saturated"] < 0.01
     assert stage_metrics(varied)["texture"] > 0
+
+
+def test_zero_lag_is_reported_and_flags_a_stationary_pattern():
+    """A stationary pattern puts correlation energy at zero lag whatever else moves."""
+    yy, xx = np.mgrid[0:64, 0:64]
+    static = np.exp(-((yy - 32) ** 2 + (xx - 32) ** 2) / (2 * 3.0 ** 2)).astype(np.float32)
+    moving = np.exp(-((yy - 26) ** 2 + (xx - 38) ** 2) / (2 * 3.0 ** 2)).astype(np.float32)
+
+    *_, zl_static = peak_find(static[None, None])
+    assert zl_static[0, 0] == pytest.approx(1.0, abs=1e-5)
+
+    du, dv, peak, _, zl_moving = peak_find(moving[None, None])
+    assert abs(zl_moving[0, 0]) < 0.05          # nothing at zero lag
+    assert du[0, 0] == pytest.approx(6.0, abs=0.3)
+    assert dv[0, 0] == pytest.approx(-6.0, abs=0.3)
+
+    # a window carrying both: the peak is displaced but zero lag stays high
+    mixed = 0.6 * static + 1.0 * moving
+    du, dv, peak, _, zl_mixed = peak_find(mixed[None, None])
+    assert zl_mixed[0, 0] / peak[0, 0] > 0.4
+    assert np.hypot(du[0, 0], dv[0, 0]) > 3.0
+
+
+def test_piv_pair_carries_zero_lag(particle_pair):
+    a, b = particle_pair(4.0, -3.0)
+    f = piv_pair(a, b, PIVCfg(windows=[64], overlap=0.5))
+    assert f.zero_lag is not None
+    assert f.zero_lag.shape == f.u.shape

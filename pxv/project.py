@@ -218,11 +218,19 @@ class GridCfg:
     #: cells are tagged as interpolated and never counted as measurements.
     interpolate_radius_px: float = 0.0
     interpolate_min_neighbours: int = 2
-    #: a PIV cell is judged bed-locked when it reports a displacement below
-    #: piv_static_threshold_px in at least piv_static_fraction of the pairs where
-    #: it produced a vector. Persistence is what separates a stationary bed from
-    #: genuinely slow water, which fluctuates.
+    #: PIV cells are classified from the temporal structure of their own vectors.
+    #: A cell whose moving fraction is at least piv_clean_min is clean; below
+    #: piv_moving_min it is static and dropped; in between it is mixed, meaning
+    #: correlation alternates between the surface and a stationary pattern.
+    #: Mixed cells are estimated from their moving samples alone, because a median
+    #: over both populations lands between them and reports a speed that was never
+    #: observed. A displacement threshold on its own cannot do this: a stationary
+    #: bed and genuinely slow water both report small numbers, and what separates
+    #: them is whether the small numbers persist.
     piv_static_threshold_px: float = 0.5
+    piv_moving_min: float = 0.25
+    piv_clean_min: float = 0.85
+    #: retained for the older whole-cell test
     piv_static_fraction: float = 0.6
     #: rescale the surviving PIV cells using the PTV cells beside them, which is
     #: the correction step of "PIV first, then correct with PTV"

@@ -225,15 +225,29 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
     # surface does, and both happen in one frame. Judge each PIV cell on its own
     # rather than discarding the whole field on one verdict.
     piv_static = float("nan")
-    piv_drop = None
+    piv_classes = None
     if piv_fields:
-        piv_drop = fuse_mod.piv_static_cells(
+        piv_classes, diag = fuse_mod.classify_piv_cells(
             piv_fields, project.grid.piv_static_threshold_px,
-            project.grid.piv_static_fraction)
-        alive = piv_fields[0].valid.size - int(piv_drop.sum())
-        piv_static = float(piv_drop.sum()) / max(piv_drop.size, 1)
-        _log(log, f"PIV per-cell health: {int(piv_drop.sum())} of {piv_drop.size} cells "
-                  f"are persistently static and were dropped; {alive} kept", verbose)
+            project.grid.piv_moving_min, project.grid.piv_clean_min)
+        counts = diag["counts"]
+        piv_static = counts["static"] / max(piv_classes.size, 1)
+        _log(log, f"PIV cell classification: clean {counts['clean']}, "
+                  f"mixed {counts['mixed']}, static {counts['static']}, "
+                  f"empty {counts['empty']} (of {piv_classes.size})", verbose)
+        if counts["mixed"]:
+            _log(log, f"  mixed cells alternate between the surface and a stationary "
+                      f"pattern; they are estimated from their moving samples only, "
+                      f"which is what removes the low bias a plain median would carry",
+                 verbose)
+        if "zero_lag_ratio" in diag:
+            zr = diag["zero_lag_ratio"]
+            for name, code in (("clean", fuse_mod.CELL_CLEAN), ("mixed", fuse_mod.CELL_MIXED),
+                               ("static", fuse_mod.CELL_STATIC)):
+                sel = (piv_classes == code) & np.isfinite(zr)
+                if sel.any():
+                    _log(log, f"  zero-lag/peak correlation, {name:6s} cells: "
+                              f"median {np.median(zr[sel]):.2f}", verbose)
 
     t0 = time.time()
     tracks: Tracks | None = None
@@ -254,7 +268,8 @@ def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
         raise RuntimeError("both PIV and PTV are disabled; nothing to compute")
 
     field = fuse_mod.fuse(proc.shape[1:], project.grid.cell_px, piv_fields, tracks,
-                          project.grid.min_samples, piv_drop=piv_drop)
+                          project.grid.min_samples, piv_classes=piv_classes,
+                          piv_threshold_px=project.grid.piv_static_threshold_px)
 
     # "PIV first, then correct with PTV": PIV supplies coverage, PTV supplies
     # accuracy, and where they coincide their ratio carries to the PIV-only cells.

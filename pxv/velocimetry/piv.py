@@ -31,6 +31,10 @@ class PIVField:
     corr: np.ndarray       # normalised correlation peak
     snr: np.ndarray        # primary-to-secondary peak ratio
     valid: np.ndarray      # bool mask after validation
+    #: correlation at zero lag. A stationary pattern seen through moving water
+    #: puts energy there whatever the surface is doing, so the ratio of this to
+    #: the peak measures how much of the window is not moving.
+    zero_lag: np.ndarray | None = None
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -105,8 +109,8 @@ def peak_find(
     Fully vectorised over the window grid: a 1400-frame clip means millions of
     peak searches, and a per-window Python loop makes the tool unusable.
 
-    Returns ``(du, dv, corr, snr)``, displacements relative to the plane centre in
-    pixels.
+    Returns ``(du, dv, corr, snr, zero_lag)``, displacements relative to the plane
+    centre in pixels.
     """
     ny, nx, wy, wx = planes.shape
     flat = planes.reshape(ny, nx, wy * wx)
@@ -166,7 +170,8 @@ def peak_find(
     bad = peak <= 0
     du = np.where(bad, np.nan, du).astype(np.float32)
     dv = np.where(bad, np.nan, dv).astype(np.float32)
-    return du, dv, peak.astype(np.float32), snr.astype(np.float32)
+    zero_lag = planes[:, :, wy // 2, wx // 2].astype(np.float32)
+    return du, dv, peak.astype(np.float32), snr.astype(np.float32), zero_lag
 
 
 def _neighbourhood(field: np.ndarray) -> np.ndarray:
@@ -234,7 +239,8 @@ def piv_pair(a: np.ndarray, b: np.ndarray, cfg: PIVCfg) -> PIVField:
         texture = window_texture(wa, wb)
         tex_ok = texture > max(float(cfg.min_texture), 1e-6)
         planes = correlation_planes(wa, wb)
-        rdu, rdv, cc, snr = peak_find(planes, cfg.subpixel, cfg.snr_method, cfg.snr_exclusion_px)
+        rdu, rdv, cc, snr, zl = peak_find(planes, cfg.subpixel, cfg.snr_method,
+                                          cfg.snr_exclusion_px)
 
         du = rdu + applied[0]
         dv = rdv + applied[1]
@@ -250,7 +256,7 @@ def piv_pair(a: np.ndarray, b: np.ndarray, cfg: PIVCfg) -> PIVField:
     x = (xs + windows[-1] / 2.0).astype(np.float32)
     y = (ys + windows[-1] / 2.0).astype(np.float32)
     xx, yy = np.meshgrid(x, y)
-    return PIVField(x=xx, y=yy, u=du, v=dv, corr=cc, snr=snr, valid=valid)
+    return PIVField(x=xx, y=yy, u=du, v=dv, corr=cc, snr=snr, valid=valid, zero_lag=zl)
 
 
 def _validate(du, dv, cc, snr, cfg: PIVCfg, texture_ok: np.ndarray | None = None) -> np.ndarray:
@@ -303,9 +309,9 @@ def piv_ensemble(pairs, cfg: PIVCfg, progress=None) -> PIVField:
     if acc is None:
         raise ValueError("no image pairs supplied")
     acc /= count
-    du, dv, cc, snr = peak_find(acc, cfg.subpixel, cfg.snr_method, cfg.snr_exclusion_px)
+    du, dv, cc, snr, zl = peak_find(acc, cfg.subpixel, cfg.snr_method, cfg.snr_exclusion_px)
     valid = _validate(du, dv, cc, snr, cfg, texture_acc > 0.5 * count)
     x = (xs + window / 2.0).astype(np.float32)
     y = (ys + window / 2.0).astype(np.float32)
     xx, yy = np.meshgrid(x, y)
-    return PIVField(x=xx, y=yy, u=du, v=dv, corr=cc, snr=snr, valid=valid)
+    return PIVField(x=xx, y=yy, u=du, v=dv, corr=cc, snr=snr, valid=valid, zero_lag=zl)
