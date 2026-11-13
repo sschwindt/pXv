@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Measure water surface motion from drone and lab footage using PTV or PIV.">
+  <title>pXv · Surface velocimetry</title>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">p<span>X</span>v</a>
+    <span class="brand-caption">Surface velocimetry</span>
+    <div class="top-actions">
+      <label class="help-switch"><input id="show-help" type="checkbox" checked> Help bubbles</label>
+      <button id="example" type="button">Load Isar example</button>
+      <button id="open-import" type="button">Import</button>
+      <button id="save-project" type="button" disabled>Save project</button>
+      <button id="load-project" type="button">Load project</button>
+    </div>
+  </header>
+  <main class="shell">
+    <div id="survey-banner" class="survey-banner" role="status" hidden>
+      <span id="survey-banner-text"></span>
+      <button id="review-import" type="button">Review import</button>
+    </div>
+    <div class="project-heading">
+      <div>
+        <h1 id="project-title">Isar River</h1>
+        <p id="project-subtitle">4 August 2026 · Seeded drone survey</p>
+      </div>
+      <div class="project-meta" id="video-meta" aria-live="polite">Opening footage…</div>
+    </div>
+    <p id="project-status" class="status project-status" role="status"></p>
+    <div class="workspace">
+      <div class="main-column">
+        <section class="panel viewport" aria-labelledby="viewport-title">
+          <div class="panel-head">
+            <h2 id="viewport-title">Surface view</h2>
+            <span id="frame-label">Reference frame</span>
+          </div>
+          <div class="image-wrap" id="image-wrap">
+            <canvas id="overlay" width="1920" height="1080" aria-label="Reference video frame with analysis areas, survey points and velocity vectors"></canvas>
+            <div class="image-placeholder" id="image-placeholder">Loading reference frame…</div>
+          </div>
+          <div class="layers">
+            <label><input id="show-water" type="checkbox"> Masks</label>
+            <label><input id="show-tracks" type="checkbox" checked> Tracks</label>
+            <label><input id="show-vectors" type="checkbox" checked> Vectors</label>
+            <label><input id="show-survey" type="checkbox" checked> Survey</label>
+            <span class="legend"><i></i> Survey vertical</span>
+          </div>
+          <div id="vector-scale" class="vector-scale" hidden>
+            <span id="scale-start">0</span><span class="ramp"></span><span id="scale-end"></span>
+          </div>
+        </section>
+        <section class="panel results" aria-labelledby="results-title">
+          <div class="panel-head">
+            <h2 id="results-title">Surface speed</h2>
+            <div class="export-actions">
+              <button id="export-vectors" type="button" disabled>Vectors CSV</button>
+              <button id="export-survey" type="button" disabled>Survey CSV</button>
+              <button id="export-xlsx" type="button" disabled>Export XLSX</button>
+              <button id="export-graph" type="button" disabled>Export result graph</button>
+            </div>
+          </div>
+          <div class="metrics">
+            <div><span class="metric-label" id="video-speed-label">Video median</span><strong id="video-speed">—</strong><small id="video-detail">Run an analysis to measure surface motion.</small></div>
+            <div><span class="metric-label" id="survey-scope">Survey median</span><strong id="survey-speed">—</strong><small id="survey-detail">Loading the survey…</small></div>
+            <div><span class="metric-label">Local video vs. survey</span><strong id="match-error">—</strong><small id="match-detail">Uses nearby measured vectors.</small></div>
+          </div>
+          <p id="result-note" class="result-note">The Isar preset uses PTV to follow injected tracers through clear water.</p>
+          <section id="survey-controls" class="survey-controls" aria-labelledby="survey-controls-title" hidden>
+            <h3 id="survey-controls-title">Survey comparison</h3>
+            <div class="survey-controls-grid">
+              <label>Use survey for
+                <select id="survey-mode"><option value="none">Reference only</option><option value="validation" selected>Validation</option><option value="calibration">Calibration and validation</option></select>
+              </label>
+              <label>Match radius (m)
+                <input id="match-radius" type="number" min="0.01" step="any" value="1.5">
+              </label>
+            </div>
+            <p class="hint" id="survey-alignment"></p>
+            <p class="hint" id="calibration-summary" aria-live="polite"></p>
+          </section>
+          <details id="diagnostics" hidden><summary>Run diagnostics</summary><dl id="diagnostic-list"></dl></details>
+        </section>
+      </div>
+      <aside class="panel settings" aria-labelledby="settings-title">
+        <div class="panel-head"><h2 id="settings-title">Analysis setup</h2></div>
+        <form id="settings-form">
+          <fieldset>
+            <legend>Method</legend>
+            <div class="segment">
+              <label><input type="radio" name="method" value="ptv" checked><span>PTV</span></label>
+              <label><input type="radio" name="method" value="piv"><span>PIV</span></label>
+              <label><input type="radio" name="method" value="combined"><span>Both</span></label>
+            </div>
+            <p id="method-help" class="hint">Track bright surface tracers.</p>
+          </fieldset>
+          <fieldset>
+            <legend>Frames</legend>
+            <div class="three-up">
+              <label>Start<input id="start" type="number" min="0" step="1" value="1250" required></label>
+              <label>Stop<input id="stop" type="number" min="2" step="1" value="1650" required></label>
+              <label>Step<input id="step" type="number" min="1" step="1" value="1" required></label>
+            </div>
+            <p class="hint" id="time-window">Zero-based, stop excluded.</p>
+          </fieldset>
+          <fieldset>
+            <legend>Scale</legend>
+            <label class="visually-hidden" for="scale-mode">Scale mode</label>
+            <select id="scale-mode">
+              <option value="camera">DJI camera telemetry</option>
+              <option value="control" id="control-option" hidden>Ground control points</option>
+              <option value="linear">Uniform metres per pixel</option>
+              <option value="pixel">Image coordinates (px/s)</option>
+            </select>
+            <div id="camera-fields">
+              <label>Camera height above takeoff (m, from SRT)
+                <input id="srt-height" type="number" step="any" placeholder="—" readonly>
+              </label>
+              <label>UAS takeoff above water surface (m)
+                <input id="offset" type="number" step="any" value="0" aria-describedby="offset-help">
+              </label>
+              <p class="hint" id="offset-help">Add the offset to the SRT height. Use a negative value if takeoff was below water level.</p>
+            </div>
+            <label id="linear-field" hidden>Metres per pixel
+              <input id="metres" type="number" min="0.000001" step="any" value="0.025">
+            </label>
+            <div class="scale-note">
+              <p class="hint" id="scale-help"></p>
+              <button id="edit-reference" class="text-button" type="button">Edit import and georeference</button>
+            </div>
+          </fieldset>
+          <details>
+            <summary>Masks and engine settings</summary>
+            <div class="advanced">
+              <div class="mask-buttons">
+                <button id="draw-water" type="button">Draw water</button>
+                <button id="draw-bank" type="button">Draw bank</button>
+                <button id="clear-masks" type="button">Clear masks</button>
+              </div>
+              <p class="hint" id="mask-help">Static bank areas anchor camera drift. Water polygons limit measurements.</p>
+              <div class="mask-buttons" id="draw-actions" hidden>
+                <button id="finish-mask" type="button">Finish polygon</button>
+                <button id="cancel-mask" type="button">Cancel polygon</button>
+              </div>
+              <div class="three-up" id="ptv-settings">
+                <label>Brightness<input id="threshold" type="number" step="0.01" min="0.05" max="1" value="0.86"></label>
+                <label>Min area<input id="area-min" type="number" min="1" step="1" value="20"></label>
+                <label>Max area<input id="area-max" type="number" min="1" step="1" value="400"></label>
+              </div>
+              <div class="two-up">
+                <label id="travel-field">PTV travel (px/frame)<input id="travel" type="number" min="1" max="80" step="1" value="12"></label>
+                <label>Cell size (px)<input id="cell" type="number" min="8" max="256" step="1" value="24"></label>
+              </div>
+              <div id="track-length-field" class="filter-row">
+                <label for="track-frames">Minimum PTV track length (frames)</label>
+                <input id="track-frames" type="number" min="2" step="1" value="4" required>
+                <button class="help-button" data-help="track-length" aria-label="Help with minimum track length" aria-controls="filter-help" type="button">?</button>
+              </div>
+              <div id="piv-settings" class="two-up" hidden>
+                <label>Window (px)
+                  <select id="window-size"><option>32</option><option selected>48</option><option>64</option><option>96</option></select>
+                </label>
+                <label>Search (px/pair)<input id="piv-radius" type="number" min="1" max="64" step="1" value="8"></label>
+              </div>
+            </div>
+          </details>
+          <button class="primary" id="run" type="submit" disabled>Run analysis</button>
+          <button id="stop-run" type="button" hidden>Cancel run</button>
+          <progress id="progress" max="1" value="0" hidden></progress>
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </form>
+        <section class="filter-settings" aria-labelledby="filters-title">
+          <h2 id="filters-title">Vector filters</h2>
+          <div class="filter-row">
+            <label><input id="limit-speed" type="checkbox" checked> Maximum speed</label>
+            <div class="input-unit"><input id="speed-limit" aria-label="Maximum speed" type="number" min="0.01" step="any" value="3"><span>m/s</span></div>
+            <button class="help-button" data-help="speed" aria-label="Help with maximum speed" aria-controls="filter-help" type="button">?</button>
+          </div>
+          <div class="filter-row" id="piv-filter-row">
+            <label><input id="filter-piv" type="checkbox"> PIV local median</label>
+            <input id="piv-limit" aria-label="PIV normalized median threshold" type="number" min="0.1" step="any" value="2">
+            <button class="help-button" data-help="piv" aria-label="Help with the PIV local median" aria-controls="filter-help" type="button">?</button>
+          </div>
+          <div class="filter-row" id="ptv-filter-row">
+            <label><input id="filter-ptv" type="checkbox"> PTV tracks per cell</label>
+            <input id="ptv-limit" aria-label="Minimum distinct PTV tracks per cell" type="number" min="1" step="1" value="2">
+            <button class="help-button" data-help="ptv" aria-label="Help with PTV tracks per cell" aria-controls="filter-help" type="button">?</button>
+          </div>
+          <p id="filter-status" class="hint" role="status">Filters apply to results as soon as you change them.</p>
+          <label class="rejected-toggle"><input id="show-rejected" type="checkbox" disabled> Show excluded vectors</label>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <dialog id="import-dialog" aria-labelledby="import-title">
+    <form id="import-form" novalidate>
+      <div class="wizard-head">
+        <div><p id="import-progress" class="hint"></p><h2 id="import-title">Import</h2></div>
+        <button id="cancel-import" type="button" aria-label="Close import">×</button>
+      </div>
+      <section id="import-video-step">
+        <h3>Choose footage</h3>
+        <label>Video file<input id="import-video" type="file" accept=".mp4,.mov,.m4v,video/mp4,video/quicktime"></label>
+        <p id="import-video-info" class="hint">Choose a regular MP4, MOV or M4V that your browser can decode.</p>
+      </section>
+      <section id="import-geo-step" hidden>
+        <h3>Set video scale and location</h3>
+        <label>DJI SRT file (optional)<input id="import-srt" type="file" accept=".srt,text/plain"></label>
+        <p id="import-srt-info" class="hint">A matching DJI SRT supplies camera height, gimbal angles, focal length and GPS. These let pXv convert pixel motion to metres per second and locate it on the survey map.</p>
+        <button id="remove-srt" type="button" hidden>Remove SRT</button>
+        <label>Video reference
+          <select id="import-scale"><option value="pixel">Image coordinates (px/s)</option><option value="linear">Known scale (m/px)</option><option value="camera">DJI camera telemetry</option><option value="control">Ground control points</option></select>
+        </label>
+        <p class="hint">Without an SRT, use a known scale for metric speeds in a flat, downward-looking view, enter ground control points to match a georeferenced survey, or analyze in pixels per second.</p>
+        <label id="import-metres-field" hidden>Metres per pixel<input id="import-metres" type="number" min="0.000001" step="any" value="0.025"></label>
+        <label id="import-offset-field" hidden>UAS takeoff above water surface (m)<input id="import-offset" type="number" step="any" value="0"></label>
+        <div id="import-gcp-fields" hidden>
+          <label>Control point EPSG code<input id="import-gcp-epsg" type="text" placeholder="e.g. 25832"></label>
+          <canvas id="import-gcp-preview" width="1" height="1" aria-label="Video reference frame for locating ground control points" hidden></canvas>
+          <p id="import-gcp-position" class="hint" aria-live="polite"></p>
+          <label>Ground control point coordinates<textarea id="import-gcp" rows="5" spellcheck="false" placeholder="image_x_px,image_y_px,easting,northing"></textarea></label>
+          <p class="hint">Enter one water-plane point per line as image x, image y, map x, map y. Three points fit an affine map. Use four or more well-spread points for perspective correction. Pixel coordinates start at the top left.</p>
+        </div>
+      </section>
+      <section id="import-survey-step" hidden>
+        <h3>Add ground truth (optional)</h3>
+        <label>Georeferenced velocity file<input id="import-survey" type="file" accept=".gpkg,.geojson,.json,.csv,.tsv"></label>
+        <p class="hint" id="import-survey-info">Choose a GeoPackage point layer, GeoJSON, CSV, TSV or pXv survey JSON. Use metres per second for velocity and metres for depth.</p>
+        <button id="remove-survey" type="button" hidden>Remove survey</button>
+        <label id="import-layer-field" hidden>GeoPackage point layer<select id="import-layer"></select></label>
+        <div id="import-survey-options" hidden>
+          <div class="two-up">
+            <label>Survey EPSG code<input id="import-survey-epsg" type="text" placeholder="e.g. 4326 or 25832"></label>
+            <label>Measurement depth<select id="import-measurement"><option value="auto">Read from data</option><option value="surface">Measured at surface</option><option value="depth">Measured below surface</option></select></label>
+          </div>
+          <details id="import-columns"><summary>Match survey columns</summary><div class="survey-columns" id="import-mapping"></div></details>
+        </div>
+      </section>
+      <section id="import-review-step" hidden>
+        <h3>Check alignment and survey use</h3>
+        <dl id="import-review"></dl>
+        <p id="import-alignment" class="wizard-message" role="status"></p>
+        <label id="import-reproject-field" hidden><input id="import-reproject" type="checkbox"> Reproject survey to the video CRS</label>
+        <div id="import-purpose" hidden>
+          <label>Use survey for
+            <select id="import-mode"><option value="none">Reference only</option><option value="validation" selected>Validation</option><option value="calibration">Calibration and validation</option></select>
+          </label>
+          <label>Match radius (m)<input id="import-radius" type="number" min="0.01" step="any" value="1.5"></label>
+          <p class="hint">Validation compares nearby speeds. Calibration can fit a speed multiplier for each method and test it on separate locations when enough independent matches exist.</p>
+        </div>
+      </section>
+      <p id="import-error" class="status error" role="alert"></p>
+      <div class="wizard-actions">
+        <button id="import-back" type="button">Back</button>
+        <button id="import-next" type="submit" class="primary">Next</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="graph-dialog" aria-labelledby="graph-title" class="settings-dialog">
+    <form id="graph-form">
+      <div class="wizard-head"><h2 id="graph-title">Export result graph</h2><button id="close-graph" type="button" aria-label="Close graph export">×</button></div>
+      <div class="two-up">
+        <label>Width (px)<input id="graph-width" type="number" step="1" value="1920" required></label>
+        <label>Height (px)<input id="graph-height" type="number" step="1" value="1080" required></label>
+      </div>
+      <p id="graph-units" class="hint"></p>
+      <p id="graph-error" class="status error" role="alert"></p>
+      <div class="wizard-actions"><button class="primary" type="submit" id="download-graph">Download PNG</button></div>
+    </form>
+  </dialog>
+  <dialog id="project-dialog" aria-labelledby="load-project-title" class="settings-dialog">
+    <form id="project-form">
+      <div class="wizard-head"><h2 id="load-project-title">Load project</h2><button id="close-project" type="button" aria-label="Close project load">×</button></div>
+      <label>Project file (.pxv)<input id="project-file" type="file" accept=".pxv,application/json"></label>
+      <p id="project-file-info" class="hint">Choose a saved pXv project to restore its analysis settings.</p>
+      <label id="project-video-field" hidden>Original video<input id="project-video" type="file" accept=".mp4,.mov,.m4v,video/mp4,video/quicktime"></label>
+      <p id="project-error" class="status error" role="alert"></p>
+      <div class="wizard-actions"><button class="primary" type="submit" id="apply-project" disabled>Load settings</button></div>
+    </form>
+  </dialog>
+  <div id="filter-help" class="help-popover" popover aria-labelledby="help-title">
+    <div class="help-head"><strong id="help-title"></strong><button id="close-help" type="button" aria-label="Close help">×</button></div>
+    <div id="help-body"></div>
+  </div>
+  <template id="help-speed">
+    <p>Set a site-specific upper bound on total speed, √(u² + v²), after applying the metric scale. The Isar example starts at 3 m/s. Use “Show excluded vectors” to check for a real fast jet or a scale error.</p>
+  </template>
+  <template id="help-piv">
+    <p>Start at 2. The test compares each vector with nearby PIV vectors and accounts for their typical variation. Higher values keep more vectors. Cells with too few neighbours stay in the result. Review flags near shear layers and bends.</p>
+    <a href="https://doi.org/10.1007/s00348-005-0016-6" target="_blank" rel="noopener noreferrer">Westerweel &amp; Scarano (2005)</a>
+  </template>
+  <template id="help-ptv">
+    <p>Set the number of distinct tracer tracks that must pass through each cell. Two tracks give repeat observations. For sparse seeding, start at one or leave this off and inspect the trajectories. This setting changes coverage.</p>
+    <a href="https://doi.org/10.1016/j.cageo.2019.03.007" target="_blank" rel="noopener noreferrer">Heyman (2019), TracTrac</a>
+  </template>
+  <template id="help-track-length">
+    <p>Start at four frames. Increase this and rerun if brief false matches survive. Longer tracks provide more evidence, but this also drops real tracers that leave the image or become obscured.</p>
+    <a href="https://link.springer.com/article/10.1007/s00348-013-1533-3" target="_blank" rel="noopener noreferrer">Cierpka et al. (2013), multi-frame PTV</a>
+  </template>
+</body>
+</html>

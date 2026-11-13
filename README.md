@@ -1,12 +1,12 @@
 # pXv
 
-Mixed PIV and PTV surface velocimetry for drone and lab top-view video, with a
-PySide6 GUI, ground-truth-driven calibration, and QGIS-ready exports.
+Mixed PIV and PTV surface velocimetry for drone and lab video, with a local
+JavaScript browser app and a Python workflow for calibration and GIS exports.
 
-pXv turns a nadir-looking video of a water surface into a georeferenced surface
-velocity field. It carries two velocimetry engines behind one shared geometry,
-stabilisation, validation and calibration frame, so the same clip can be
-processed either way and the two results compared directly:
+The Python workflow turns a downward-looking video of a water surface into a
+georeferenced surface velocity field. Its two engines share geometry,
+stabilisation, validation and calibration so the same clip can be processed
+either way and the results compared directly:
 
 - **PIV**, multi-pass FFT cross-correlation, for dense particle swarms and
   natural surface texture
@@ -17,6 +17,141 @@ processed either way and the two results compared directly:
 
 See [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md) for the design
 rationale, the reference workflow it implements, and the open questions.
+
+## Browser app
+
+Run the local JavaScript app with Node.js 24 or later:
+
+```sh
+node web/server.mjs
+```
+
+Open [pXv](http://127.0.0.1:8040/) in Chrome or Edge with WebCodecs available.
+No package installation is required. The server listens on loopback and serves
+the Isar example from the checkout. Video, SRT, and text surveys are read in
+the browser. GeoPackage files are parsed by the local server. Use `PXV_PORT`
+to override the default port.
+
+The **Isar River** preset loads the RGB MP4 and matching DJI SRT from
+`examples/isar-20260804/`, plus the FlowTracker2 points in `IsarAug2026.gpkg`.
+The footage is Git-ignored. Place
+`DJI_20260804150234_0002_D.MP4` beside its SRT if working from a fresh clone.
+Select **Run analysis** to track the seeded tracers in frames 1250 through 1649.
+
+For another clip, select **Import** and choose a regular MP4, MOV or M4V.
+The browser must support the file’s H.264 or H.265 video codec. Add a matching
+DJI SRT if available. The SRT supplies camera geometry and GPS. Without it,
+choose pixel speeds, enter a known scale for local metric speeds, or register
+the video using ground control points on the water plane. The wizard previews
+the reference frame. Three non-collinear points fit an affine map and four or
+more well-spread points fit a projective map. Additional control points allow
+a residual check.
+
+Select a frame window and draw water and static bank polygons as needed.
+PTV tracks bright particles, PIV
+correlates texture, and **Both** gives PTV precedence in overlapping grid cells.
+Choose DJI camera geometry, a known uniform metric scale, or pixel units. The
+DJI SRT supplies the camera height above takeoff at the reference frame. Enter
+the takeoff elevation minus the water-surface elevation in **UAS takeoff above
+water surface (m)**. The app adds the two values to project onto the water plane.
+The browser exports velocity cells and survey estimates as CSV or XLSX. The
+workbook includes the active analysis settings and, when applicable, a sheet
+of excluded vectors with their rejection reasons. The Python workflow below
+covers additional inputs, calibration and GIS formats.
+
+**Export result graph** downloads a PNG at the width and height you enter.
+It includes the reference frame, retained velocity arrows, a speed legend,
+and a scale bar. Georeferenced exports also include a north arrow. The
+export keeps the aspect ratio of the footage.
+
+**Save project** downloads a `.pxv` file with the frame window, analysis
+settings, masks, scale, survey and calibration choices, filters, and graph
+dimensions. It includes the SRT and imported survey readings. **Load project**
+restores these settings and asks you to select the original video if it is
+needed. Run analysis to regenerate the results.
+
+**Vector filters** update the overlay, speed summaries, survey comparison,
+and vector exports without rerunning the video. Use **Show excluded vectors**
+to locate flags, and **Help bubbles** in the top bar to control inline help.
+
+- **Maximum speed** checks total vector magnitude after applying the metric
+  scale. The Isar preset starts at 3 m/s. Choose a bound appropriate to each site.
+- **PIV local median** compares vector components with nearby PIV cells using
+  the [normalized median test](https://link.springer.com/article/10.1007/s00348-005-0016-6).
+  Start at 2 and inspect flags near genuine gradients. Sparse, one-sided or
+  masked neighbourhoods can leave cells untested.
+- **PTV tracks per cell** lets you require repeat coverage by distinct
+  trajectories. Start at one for sparse seeding. The engine already checks
+  motion consistency across frames. To screen out short tracks, raise
+  **Minimum PTV track length** in the engine settings and rerun.
+  [Heyman (2019)](https://doi.org/10.1016/j.cageo.2019.03.007),
+  [Cierpka et al. (2013)](https://link.springer.com/article/10.1007/s00348-013-1533-3)
+
+### Survey import and velocity errors
+
+The wizard accepts GeoPackage point layers, GeoJSON, CSV, TSV, and pXv survey
+JSON. Select a layer when needed and map its coordinate and velocity columns.
+Use metres per second for velocity and metres for depth. Supply either speed
+or both horizontal components. Specify surface measurements or supply both
+the measurement depth below the surface and the total water depth. A CSV with
+surface readings can use `longitude,latitude,speed_m_s,epsg` as its header.
+
+The review step checks the declared EPSG codes and projects the survey points
+into the video footprint. Enable the proposed reprojection if the coordinate
+systems differ. Supported systems include WGS 84 and ETRS89 geographic
+coordinates, Web Mercator, and WGS 84 or ETRS89 UTM zones. Survey positions are
+transformed. Speed comparisons use scalar magnitudes in a common metric UTM
+system. For a local video with only a metric scale, add mapped control points
+before comparing it with a survey. GPS, camera heading, and water-level
+assumptions can still shift point locations after reprojection.
+
+Choose **Reference only**, **Validation**, or **Calibration and validation**.
+The comparison uses the closest measured cell within the match radius, with
+one reference per cell. Calibration can fit one median speed multiplier per
+method using at least five spaced fit locations and three separate holdout
+locations. It reports baseline and calibrated RMSE on the same holdout.
+References based on roughness fitted from the whole survey are available for
+local comparisons. Direct surface measurements and local profile estimates
+can enter the calibration split.
+
+Vector CSV and XLSX include `speed_error_m_s`, the absolute difference from a
+matched reference. They also include the signed residual, match distance, and
+whether the pair was used for fitting, held out, or used only for comparison.
+Unmatched errors are blank. The error includes reference and spatial matching
+effects. Workbook settings record the coordinate systems and fit diagnostics.
+
+### Isar surface-speed estimate
+
+The GeoPackage contains 102 readings at multiple depths. The browser groups
+co-located readings within 0.10 m and uses
+`z/h = 1 - Meas_Depth_m / Total_Depth_m` as the height above the bed. It uses a
+local log profile where the paired readings support it and otherwise extrapolates
+the highest reading using the site roughness. Twenty-nine pairs yield a median
+roughness length of 9.8 mm. One speed is reported per usable position.
+
+- **Survey:** 1.24 m/s median across nine usable surveyed positions in the camera
+  footprint. The 10th–90th percentile across those positions is 0.86–2.02 m/s.
+  Applying the site roughness at all nine gives a 1.31 m/s median. The full
+  GeoPackage gives a 1.24 m/s median across 63 usable positions.
+- **Video:** the 400-frame browser PTV run gave 1.48 m/s median across 43 measured
+  cells along tracer paths, with a 1.28–1.63 m/s 10th–90th percentile. One survey
+  position had a measured tracer cell within 1.5 m. The spatial overlap supports
+  one point comparison and leaves field-wide validation open.
+
+The survey figures describe sampled positions, and the percentile bands describe
+spatial spread. Some near-bed readings have substantial profile uncertainty.
+The video uses projective scale with the gimbal 11.6° off nadir. The assumed
+takeoff-to-water elevation difference is 0 m, so height above water is about
+35.21 m. Changing that height scales the video speeds proportionally and shifts
+the projected locations. The survey readings are independent of this scale.
+Visible gravel affects Isar PIV, so the seeded PTV result is used for the video
+estimate.
+
+Run the JavaScript regression tests with:
+
+```sh
+node --test "web/*.test.mjs"
+```
 
 ## Install
 

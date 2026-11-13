@@ -1,0 +1,11 @@
+{
+  "name": "pxv",
+  "private": true,
+  "scripts": {
+    "start": "node web/server.mjs",
+    "test": "node --test web/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
