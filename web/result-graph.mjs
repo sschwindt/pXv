@@ -1,6 +1,9 @@
 import { reprojectPoint } from './spatial-reference.mjs'
 
 export const graphLimits = Object.freeze({ minWidth: 320, minHeight: 240, maxDimension: 8192, maxPixels: 24_000_000 })
+export const graphFormats = Object.freeze({ webp: 'image/webp', jpg: 'image/jpeg' })
+export const defaultGraphQuality = 0.86
+export const surveyColor = '#ff3a9c'
 
 export function validateGraphSize(width, height) {
   const { minWidth, minHeight, maxDimension, maxPixels } = graphLimits
@@ -13,7 +16,6 @@ export function validateGraphSize(width, height) {
 const ink = '#17231d'
 const secondary = '#526058'
 const tracerColor = '#d6f9a9'
-const surveyColor = '#ffd4a1'
 const excludedColor = '#ffb195'
 const scaleText = value => Number(value.toPrecision(3)).toString()
 const validPoint = point => point?.length === 2 && point.every(Number.isFinite)
@@ -96,9 +98,18 @@ function arrow(context, x, y, angle, length, color, stroke, outline = 0) {
   line(context, [wings[0], end, wings[1]], color, stroke, outline)
 }
 
-function diamond(context, x, y, radius, color, width, outline = 0) {
-  line(context, [[x, y - radius], [x + radius, y], [x, y + radius],
-    [x - radius, y], [x, y - radius]], color, width, outline)
+function surveyMarker(context, x, y, radius) {
+  context.beginPath()
+  context.moveTo(x, y - radius)
+  context.lineTo(x + radius, y)
+  context.lineTo(x, y + radius)
+  context.lineTo(x - radius, y)
+  context.closePath()
+  context.fillStyle = surveyColor
+  context.fill()
+  context.strokeStyle = '#231322'
+  context.lineWidth = Math.max(1.25, radius * .38)
+  context.stroke()
 }
 
 function cross(context, x, y, radius, color, width, outline = 0) {
@@ -106,9 +117,9 @@ function cross(context, x, y, radius, color, width, outline = 0) {
   line(context, [[x + radius, y - radius], [x - radius, y + radius]], color, width, outline)
 }
 
-function label(context, text, x, y, { size, color = ink, weight = 400, align = 'left', width } = {}) {
+function label(context, text, x, y, fontSize, { color = ink, weight = 400, align = 'left', width } = {}) {
   context.fillStyle = color
-  context.font = weight + ' ' + size + 'px Inter, Segoe UI, sans-serif'
+  context.font = weight + ' ' + fontSize + 'px Arial, sans-serif'
   context.textAlign = align
   context.textBaseline = 'middle'
   if (width !== undefined) {
@@ -158,7 +169,7 @@ function drawMap(context, { image, vectors, geometry, tracks, survey, rejected, 
       const position = geometry.toImage(point.x, point.y)
       if (!validPoint(position)) continue
       const [px, py] = project(...position)
-      diamond(context, px, py, 3 * stroke, surveyColor, stroke, stroke)
+      surveyMarker(context, px, py, Math.max(4.5, 6 * stroke))
     }
   }
   context.restore()
@@ -170,7 +181,7 @@ function drawFooter(context, { width, image, geometry, vectors, tracks, survey, 
   const right = width - inset
   const rampWidth = half - inset - 1.1 * type
   const speedTitle = 'Surface speed (' + (geometry?.units === 'm' ? 'm/s' : 'px/s') + ')'
-  label(context, speedTitle, inset, top + .8 * type, { size: type, weight: 650, width: rampWidth })
+  label(context, speedTitle, inset, top + .8 * type, type, { weight: 700, width: rampWidth })
   if (vectors.length && maximum > 0) {
     const gradient = context.createLinearGradient(inset, 0, inset + rampWidth, 0)
     for (let step = 0; step <= 8; step++) gradient.addColorStop(step / 8, speedColor(step / 8))
@@ -180,12 +191,11 @@ function drawFooter(context, { width, image, geometry, vectors, tracks, survey, 
     context.lineWidth = Math.max(1, type * .05)
     context.strokeRect(inset, top + 1.5 * type, rampWidth, .58 * type)
     for (const [fraction, align] of [[0, 'left'], [.5, 'center'], [1, 'right']]) {
-      label(context, scaleText(maximum * fraction), inset + fraction * rampWidth, top + 2.85 * type,
-        { size: type * .92, align })
+      label(context, scaleText(maximum * fraction), inset + fraction * rampWidth, top + 2.85 * type, type, { align })
     }
   } else {
-    label(context, vectors.length ? '0' : 'No accepted vectors', inset, top + 2.15 * type,
-      { size: type * .9, color: secondary, width: rampWidth })
+    label(context, vectors.length ? '0' : 'No accepted vectors', inset, top + 2.15 * type, type,
+      { color: secondary, width: rampWidth })
   }
 
   const localX = image.width / 2
@@ -195,52 +205,65 @@ function drawFooter(context, { width, image, geometry, vectors, tracks, survey, 
   const northX = right - 1.35 * type
   const northY = top + 2.02 * type
   const scaleWidth = northX - half - 1.65 * type
-  label(context, 'Scale at image centre', half, top + .8 * type,
-    { size: type * .85, weight: 650, width: scaleWidth })
+  label(context, 'Scale at image centre', half, top + .8 * type, type, { weight: 700, width: scaleWidth })
   if (scaleBar) {
     const end = half + scaleBar.pixels * map.scale
     const level = top + 1.82 * type
     line(context, [[half, level], [end, level]], ink, Math.max(1, type * .13))
     for (const tick of [half, end]) line(context, [[tick, level - type * .27], [tick, level + type * .27]], ink, Math.max(1, type * .11))
-    label(context, scaleText(scaleBar.length) + ' ' + scaleBar.units, half, top + 2.85 * type, { size: type * .92 })
+    label(context, scaleText(scaleBar.length) + ' ' + scaleBar.units, half, top + 2.85 * type, type)
   } else {
-    label(context, 'Unavailable', half, top + 2.15 * type, { size: type * .9, color: secondary, width: scaleWidth })
+    label(context, 'Unavailable', half, top + 2.15 * type, type, { color: secondary, width: scaleWidth })
   }
   if (north) {
-    label(context, north.label, northX, top + .44 * type, { size: type * .9, weight: 650, align: 'center' })
+    label(context, north.label, northX, top + .44 * type, type, { weight: 700, align: 'center' })
     arrow(context, northX - north.x * .66 * type, northY - north.y * .66 * type,
       Math.atan2(north.y, north.x), 1.5 * type, ink, Math.max(1, type * .11))
   } else {
-    label(context, 'North', northX, top + 1.25 * type, { size: type * .78, weight: 650, align: 'center' })
-    label(context, 'unavailable', northX, top + 2.25 * type, { size: type * .68, color: secondary, align: 'center' })
+    label(context, 'North', right, top + 1.25 * type, type, { weight: 700, align: 'right' })
+    label(context, 'unavailable', right, top + 2.25 * type, type, { color: secondary, align: 'right' })
   }
 
   const keys = []
   if (tracks.length) keys.push(['Tracer track', tracerColor, line])
-  if (survey.length && geometry?.epsg) keys.push(['Survey point', surveyColor, diamond])
+  if (survey.length && geometry?.epsg) keys.push(['Survey point', surveyColor, surveyMarker])
   if (rejected.length) keys.push(['Excluded vector', excludedColor, cross])
   for (const [index, [title, color, mark]] of keys.entries()) {
     const left = inset + index * (width - 2 * inset) / keys.length
     const level = top + 4.14 * type
     const radius = type * .26
     if (mark === line) line(context, [[left, level], [left + 2 * radius, level]], color, type * .12, type * .13)
+    else if (mark === surveyMarker) surveyMarker(context, left + radius, level, radius)
     else mark(context, left + radius, level, radius, color, type * .1, type * .13)
-    label(context, title, left + .8 * type, level, { size: type * .82, color: secondary,
+    label(context, title, left + .8 * type, level, type, { color: secondary,
       width: (width - 2 * inset) / keys.length - type })
   }
 }
 
-/** Render the selected surface analysis as a PNG with the specified pixel dimensions. */
+/**
+ * Render the reference frame and velocity overlays as a WebP or JPEG.
+ * Georeferenced plots include a north arrow and a metric scale bar.
+ *
+ * @param {object} graph - Image, velocity vectors, geometry, and export options.
+ * @param {number} graph.width - Output width in pixels.
+ * @param {number} graph.height - Output height in pixels.
+ * @param {string} [graph.format=webp] - Choose ``webp`` or ``jpg``.
+ * @param {number} [graph.quality=0.86] - Compression quality from zero to one.
+ * @returns {Promise<Blob>} Encoded image.
+ */
 export async function renderResultGraph({ width, height, image, vectors, geometry,
-  title = 'pXv', subtitle = '', tracks = [], survey = [], rejected = [], masks }) {
+  title = 'pXv', tracks = [], survey = [], rejected = [], masks,
+  format = 'webp', quality = defaultGraphQuality }) {
   validateGraphSize(width, height)
+  if (!Object.hasOwn(graphFormats, format)) throw new Error('Choose WebP or JPG for the result graph.')
+  if (!Number.isFinite(quality) || quality < 0 || quality > 1) throw new Error('Image quality must be between 0 and 1.')
   if (!(image?.width > 0) || !(image?.height > 0)) throw new Error('The reference frame is still loading.')
   const graph = new OffscreenCanvas(width, height)
   const context = graph.getContext('2d', { alpha: false })
   if (!context) throw new Error('Could not create an image canvas at this resolution.')
   const type = Math.max(11, Math.min(width / 53, height / 34))
   const inset = type * 1.12
-  const mapTop = subtitle ? type * 3.7 : type * 2.65
+  const mapTop = type * 2.65
   const keys = tracks.length || (survey.length && geometry?.epsg) || rejected.length
   const footerHeight = type * (keys ? 5.2 : 4)
   const mapArea = height - mapTop - footerHeight
@@ -255,8 +278,7 @@ export async function renderResultGraph({ width, height, image, vectors, geometr
   context.fillRect(0, 0, width, height)
   context.fillStyle = '#e6ece5'
   context.fillRect(inset, mapTop, width - 2 * inset, mapArea)
-  label(context, title, inset, type * 1.28, { size: type * 1.43, weight: 700, width: width - 2 * inset })
-  if (subtitle) label(context, subtitle, inset, type * 2.7, { size: type * .9, color: secondary, width: width - 2 * inset })
+  label(context, title, inset, type * 1.28, type, { weight: 700, width: width - 2 * inset })
   context.imageSmoothingQuality = 'high'
   context.lineCap = 'round'
   context.lineJoin = 'round'
@@ -264,5 +286,8 @@ export async function renderResultGraph({ width, height, image, vectors, geometr
   drawFooter(context, { width, image, geometry, vectors, tracks, survey, rejected, maximum }, map, {
     inset, top: height - footerHeight + type * .25, type,
   })
-  return graph.convertToBlob({ type: 'image/png' })
+  const mimeType = graphFormats[format]
+  const imageBlob = await graph.convertToBlob({ type: mimeType, quality })
+  if (imageBlob.type !== mimeType) throw new Error('This browser cannot export ' + format.toUpperCase() + '. Choose the other format.')
+  return imageBlob
 }

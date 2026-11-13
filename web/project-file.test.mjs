@@ -14,7 +14,7 @@ const project = {
     limitSpeed: false, speedLimit: 3, filterPiv: true, pivLimit: 2, filterPtv: false, ptvLimit: 2,
     surveyMode: 'calibration', matchRadius: 1.5, allowReprojection: true,
     showWater: true, showTracks: false, showVectors: true, showSurvey: true, showRejected: false, showHelp: false,
-    graphWidth: 2560, graphHeight: 1440,
+    graphWidth: 2560, graphHeight: 1440, graphFormat: 'jpg', graphQuality: 92,
   },
   engineOptions: {
     include: [[[0, 0], [1200, 100], [500, 1000]]],
@@ -65,10 +65,14 @@ test('unknown properties stay out of loaded projects and optional data may be om
   }))
   Object.defineProperty(original.engineOptions, '__proto__', { value: { polluted: true }, enumerable: true })
   original.video.url = 'https://example.test/video.mov'
+  delete original.settings.graphFormat
+  delete original.settings.graphQuality
   const restored = parseProject(JSON.stringify(original))
   assert.equal(Object.hasOwn(restored.engineOptions, '__proto__'), false)
   assert.equal(Object.hasOwn(restored.video, 'url'), false)
   assert.equal(restored.survey, null)
   assert.equal(restored.captions, null)
   assert.equal(restored.control, null)
+  assert.equal(restored.settings.graphFormat, 'webp')
+  assert.equal(restored.settings.graphQuality, 86)
 })

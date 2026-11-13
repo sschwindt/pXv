@@ -8,7 +8,7 @@
   --panel: #18221e;
   --surface: #212e28;
   --accent: #c3ed86;
-  --coral: #ffd4a1;
+  --survey-pink: #ff3a9c;
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
@@ -59,7 +59,7 @@ canvas.drawing { cursor: crosshair; touch-action: none; }
 .layers label, .legend { display: inline-flex; gap: .32rem; align-items: center; color: var(--muted); font-size: .78rem; }
 input[type="checkbox"] { accent-color: var(--accent); }
 .legend { margin-left: auto; }
-.legend i { border: 1.5px solid var(--coral); width: .55rem; height: .55rem; display: inline-block; transform: rotate(45deg); }
+.legend i { background: var(--survey-pink); border: 1px solid #36152c; width: .66rem; height: .66rem; display: inline-block; transform: rotate(45deg); }
 .vector-scale { display: flex; align-items: center; justify-content: end; padding: 0 1rem .75rem; gap: .55rem; color: var(--muted); font-size: .73rem; }
 .ramp { height: .35rem; width: min(34%, 160px); border-radius: 99px; background: linear-gradient(90deg, #6adee1, #b8ef8d, #fff09f); }
 .settings .panel-head { border-bottom: 1px solid var(--line); }

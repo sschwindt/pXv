@@ -386,12 +386,14 @@ _SECTION_TYPES = {
 
 
 def load_project(path: str | Path) -> Project:
+    """Read a YAML file into the Python pipeline's project configuration."""
     with open(path, "r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
     return Project.from_dict(data)
 
 
 def save_project(project: Project, path: str | Path) -> None:
+    """Write the project configuration to YAML, creating parent directories as needed."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         yaml.safe_dump(project.to_dict(), fh, sort_keys=False, default_flow_style=False)

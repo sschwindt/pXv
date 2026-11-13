@@ -105,6 +105,13 @@ def load_frames(project: Project, verbose: bool = False) -> tuple[np.ndarray, vi
 
 
 def run(project: Project, verbose: bool = False, progress=None) -> RunResult:
+    """Process the project's frame window and return a surface velocity field.
+
+    The pipeline applies the configured stabilization, preprocessing, and
+    velocimetry before attaching geometry and run diagnostics. Enable verbose
+    to print the analysis log. The progress callback receives completed and
+    total counts for stages that report progress.
+    """
     log: list[str] = []
     timings: dict = {}
 

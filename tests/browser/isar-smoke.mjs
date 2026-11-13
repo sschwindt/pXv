@@ -83,17 +83,35 @@ try {
   await page.getByRole('button', { name: 'Export result graph' }).click()
   await page.getByLabel('Width (px)').fill('1200')
   await page.getByLabel('Height (px)').fill('800')
-  const graph = await saveDownload(page, 'isar-result.png', () => page.getByRole('button', { name: 'Download PNG' }).click())
-  const png = await readFile(graph)
-  assert.equal(png.toString('hex', 0, 8), '89504e470d0a1a0a')
-  assert.equal(png.readUInt32BE(16), 1200)
-  assert.equal(png.readUInt32BE(20), 800)
+  assert.equal(await page.getByLabel('Image format').inputValue(), 'webp')
+  for (const [format, mime] of [['webp', 'image/webp'], ['jpg', 'image/jpeg']]) {
+    if (format === 'jpg') await page.getByRole('button', { name: 'Export result graph' }).click()
+    await page.getByLabel('Image format').selectOption(format)
+    const graph = await saveDownload(page, 'isar-result.' + format, () => page.getByRole('button', { name: 'Download image' }).click())
+    const bytes = await readFile(graph)
+    if (format === 'webp') {
+      assert.equal(bytes.toString('ascii', 0, 4), 'RIFF')
+      assert.equal(bytes.toString('ascii', 8, 12), 'WEBP')
+    } else {
+      assert.equal(bytes.toString('hex', 0, 3), 'ffd8ff')
+    }
+    const dimensions = await page.evaluate(async ({ content, mime }) => {
+      const response = await fetch('data:' + mime + ';base64,' + content)
+      const bitmap = await createImageBitmap(await response.blob())
+      const size = [bitmap.width, bitmap.height]
+      bitmap.close()
+      return size
+    }, { content: bytes.toString('base64'), mime })
+    assert.deepEqual(dimensions, [1200, 800])
+  }
 
   const project = await saveDownload(page, 'isar.pxv', () => page.getByRole('button', { name: 'Save project' }).click())
   const saved = parseProject(await readFile(project, 'utf8'))
   assert.equal(saved.video.variant, 'fixture')
   assert.equal(saved.settings.graphWidth, 1200)
   assert.equal(saved.settings.graphHeight, 800)
+  assert.equal(saved.settings.graphFormat, 'jpg')
+  assert.equal(saved.settings.graphQuality, 86)
   assert.equal(saved.survey.epsg, 25832)
   assert.ok(saved.captions.text.includes('FrameCnt:'))
   await page.locator('#speed-limit').fill('1')

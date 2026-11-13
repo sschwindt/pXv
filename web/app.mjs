@@ -8,7 +8,7 @@ import { inspectAlignment, setupImportWizard } from './import-wizard.mjs'
 import { autoUtmEpsg, describeCrs, reprojectPoint, reprojectSurvey } from './spatial-reference.mjs'
 import { openMp4, verifyVideoDecoder } from './mp4.mjs'
 import { matchesProjectVideo, parseProject, projectFileMaxBytes, serializeProject, videoDescriptor } from './project-file.mjs'
-import { graphLimits, renderResultGraph, validateGraphSize } from './result-graph.mjs'
+import { defaultGraphQuality, graphLimits, renderResultGraph, surveyColor, validateGraphSize } from './result-graph.mjs'
 
 const $ = id => document.getElementById(id)
 const controls = $('settings-form')
@@ -24,6 +24,7 @@ const projectNumbers = {
   minArea: 'area-min', maxArea: 'area-max', travel: 'travel', cellSize: 'cell', minTrackFrames: 'track-frames',
   windowSize: 'window-size', pivRadius: 'piv-radius', speedLimit: 'speed-limit', pivLimit: 'piv-limit',
   ptvLimit: 'ptv-limit', matchRadius: 'match-radius', graphWidth: 'graph-width', graphHeight: 'graph-height',
+  graphQuality: 'graph-quality',
 }
 const projectChecks = {
   limitSpeed: 'limit-speed', filterPiv: 'filter-piv', filterPtv: 'filter-ptv',
@@ -246,6 +247,8 @@ async function openSource(source, isExample, imported, project) {
   $('show-water').checked = false
   $('graph-width').value = 1920
   $('graph-height').value = 1080
+  $('graph-format').value = 'webp'
+  $('graph-quality').value = Math.round(defaultGraphQuality * 100)
   if (project) applyProjectSettings(project)
   $('project-title').textContent = isExample ? 'Isar River' : source.name.replace(/\.(mp4|mov|m4v)$/i, '')
   $('project-subtitle').textContent = isExample ? '4 August 2026 · Seeded drone survey' : 'Local footage'
@@ -645,11 +648,13 @@ function drawOverlay(geometry, visibleSurvey, vectors, rejected) {
     }
   }
   if ($('show-survey').checked && visibleSurvey) {
-    context.lineWidth = line
     for (const point of visibleSurvey) {
       const [x, y] = geometry.toImage(point.x, point.y)
-      const r = line * 2.5
-      polygon([[x, y - r], [x + r, y], [x, y + r], [x - r, y]], '#ffd4a1', true)
+      const r = line * 4
+      context.lineWidth = line * 1.5
+      polygon([[x, y - r], [x + r, y], [x, y + r], [x - r, y]], '#301126')
+      context.fillStyle = surveyColor
+      context.fill()
     }
   }
 }
@@ -906,21 +911,20 @@ $('graph-form').addEventListener('submit', async event => {
   try {
     const width = input('graph-width')
     const height = input('graph-height')
+    const format = $('graph-format').value
     validateGraphSize(width, height)
     const { geometry, filtered } = state.view
-    const { start, stop, method: runMethod, tracks } = state.result
     const blob = await renderResultGraph({
-      width, height, geometry, image: state.image, vectors: filtered.accepted,
+      width, height, format, quality: input('graph-quality') / 100, geometry,
+      image: state.image, vectors: filtered.accepted,
       title: $('project-title').textContent,
-      subtitle: runMethod.toUpperCase() + ' · Frames ' + start + '–' + (stop - 1) +
-        ' · ' + filtered.accepted.length + ' retained vectors',
-      tracks: $('show-tracks').checked ? tracks : [],
+      tracks: $('show-tracks').checked ? state.result.tracks : [],
       survey: $('show-survey').checked ? pointsInFrame(geometry) ?? [] : [],
       rejected: $('show-rejected').checked ? filtered.rejected : [],
       masks: $('show-water').checked ? state.engineOptions : undefined,
     })
     if (!graphDialog.open || generation !== state.generation) return
-    download('pxv-result-' + width + 'x' + height + '.png', blob)
+    download('pxv-result-' + width + 'x' + height + '.' + format, blob)
     graphDialog.close()
   } catch (error) {
     $('graph-error').textContent = error.message
@@ -939,7 +943,8 @@ function readProjectSettings() {
     [key, id === 'window-size' ? Number($(id).value) : input(id)]))
   const checks = Object.fromEntries(Object.entries(projectChecks).map(([key, id]) => [key, $(id).checked]))
   return { ...numbers, ...checks, method: method(), scaleMode: $('scale-mode').value,
-    surveyMode: $('survey-mode').value, allowReprojection: state.allowReprojection }
+    surveyMode: $('survey-mode').value, allowReprojection: state.allowReprojection,
+    graphFormat: $('graph-format').value }
 }
 
 function applyProjectSettings(project) {
@@ -950,6 +955,7 @@ function applyProjectSettings(project) {
   controls.elements.method.value = settings.method
   $('scale-mode').value = settings.scaleMode
   $('survey-mode').value = settings.surveyMode
+  $('graph-format').value = settings.graphFormat
   state.allowReprojection = settings.allowReprojection
   updateHelpPreference()
 }

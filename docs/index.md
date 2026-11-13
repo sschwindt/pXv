@@ -1,20 +1,15 @@
 # pXv
 
-pXv estimates surface velocity from downward-looking video. Use particle
-tracking velocimetry (PTV) to follow individual tracers or particle image
-velocimetry (PIV) to measure the motion of textured water.
-
-The local browser app imports footage, compares velocity estimates with a
-survey, and exports figures and tables. The Python workflow also provides
-command-line processing and GIS exports.
+```{raw} html
+<p><a class="btn btn-neutral" href="https://github.com/sschwindt/pXv">View on GitHub</a></p>
+```
 
 ```{toctree}
 :maxdepth: 2
 
-browser
-isar
-python
-DEVELOPMENT_PLAN
+purpose
+installation
+usage
+code-documentation
+license
 ```
-
-[Source repository](https://github.com/sschwindt/pXv)

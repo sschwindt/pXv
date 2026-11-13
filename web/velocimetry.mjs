@@ -484,6 +484,14 @@ function aggregate(bins, minSamples, source) {
   return vectors;
 }
 
+/**
+ * Create a streaming analyzer for grayscale frames. Camera stabilization uses
+ * texture inside the supplied static polygons.
+ *
+ * @param {object} [options] - Tracking, interrogation, masking, and grid settings.
+ * @param {string} [options.method=ptv] - Use ``ptv``, ``piv``, or ``combined``.
+ * @returns {object} An analyzer with ``push(frame)`` and ``finish()`` methods.
+ */
 export function createAnalyzer(options = {}) {
   const cfg = settings(options);
   const ptvEnabled = cfg.method !== "piv";
@@ -640,6 +648,14 @@ export function createAnalyzer(options = {}) {
   return { push, finish };
 }
 
+/**
+ * Analyze a sequence of grayscale frames using PIV, PTV, or both.
+ *
+ * @param {Array<object>} frames - Frames with ``gray``, ``width``, ``height``,
+ *   and strictly increasing ``time`` values in seconds.
+ * @param {object} [options] - Settings passed to ``createAnalyzer``.
+ * @returns {object} Gridded image velocities in pixels per second, tracer tracks, and diagnostics.
+ */
 export function analyzeFrames(frames, options = {}) {
   const analyzer = createAnalyzer(options);
   for (const frame of frames) analyzer.push(frame);

@@ -1,501 +1,55 @@
 # pXv
 
-[Documentation on Read the Docs](https://pxv.readthedocs.io/en/latest/)
+[View the documentation on Read the Docs](https://pxv.readthedocs.io/en/latest/)
 
-Mixed PIV and PTV surface velocimetry for drone and lab video, with a local
-JavaScript browser app and a Python workflow for calibration and GIS exports.
+## Purpose
 
-The Python workflow turns a downward-looking video of a water surface into a
-georeferenced surface velocity field. Its two engines share geometry,
-stabilisation, validation and calibration so the same clip can be processed
-either way and the results compared directly:
+pXv measures water-surface velocity from downward-looking drone and laboratory
+video using particle tracking velocimetry (PTV) and particle image velocimetry
+(PIV). The browser app handles georeferencing, survey comparison, and figure
+and table export. The Python package also provides a CLI, a desktop GUI,
+and GIS exports.
 
-- **PIV**, multi-pass FFT cross-correlation, for dense particle swarms and
-  natural surface texture
-- **PTV**, a reimplementation of TracTrac (Heyman 2019), for discrete drifting
-  objects
-- **Combined**, PIV-guided PTV: the PIV field seeds the PTV motion model, so
-  search windows shrink and mismatches collapse
+## Installation
 
-See [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md) for the design
-rationale, the reference workflow it implements, and the open questions.
-
-## Browser app
-
-Run the local JavaScript app with Node.js 24 or later:
+Clone the repository and start the browser app with Node.js 24 or later.
 
 ```sh
+git clone https://github.com/sschwindt/pXv.git
+cd pXv
 node web/server.mjs
 ```
 
-Open [pXv](http://127.0.0.1:8040/) in Chrome or Edge with WebCodecs available.
-No package installation is required. The server listens on loopback and serves
-the Isar example from the checkout. Video, SRT, and text surveys are read in
-the browser. GeoPackage files are parsed by the local server. Use `PXV_PORT`
-to override the default port.
-
-The **Isar River** preset runs on a bundled 30-frame seeded clip in
-`examples/isar-ci/`, its matching DJI SRT, and the original FlowTracker2 points
-in `examples/isar-20260804/IsarAug2026.gpkg`. Select **Run analysis** to track the
-tracers. The short clip comes from frames 1290–1319 of the original footage and
-keeps the source resolution and frame rate. GitHub Actions runs this example
-and uploads the exported results.
-
-To analyze frames 1250–1649 from the full footage, place
-`DJI_20260804150234_0002_D.MP4` beside its SRT in `examples/isar-20260804/`.
-The app prefers the full clip when present. Set `PXV_ISAR_FIXTURE=1` when
-starting the server to run the short example explicitly.
-
-For another clip, select **Import** and choose a regular MP4, MOV or M4V.
-The browser must support the file’s H.264 or H.265 video codec. Add a matching
-DJI SRT if available. The SRT supplies camera geometry and GPS. Without it,
-choose pixel speeds, enter a known scale for local metric speeds, or register
-the video using ground control points on the water plane. The wizard previews
-the reference frame. Three non-collinear points fit an affine map and four or
-more well-spread points fit a projective map. Additional control points allow
-a residual check.
-
-Select a frame window and draw water and static bank polygons as needed.
-PTV tracks bright particles, PIV
-correlates texture, and **Both** gives PTV precedence in overlapping grid cells.
-Choose DJI camera geometry, a known uniform metric scale, or pixel units. The
-DJI SRT supplies the camera height above takeoff at the reference frame. Enter
-the takeoff elevation minus the water-surface elevation in **UAS takeoff above
-water surface (m)**. The app adds the two values to project onto the water plane.
-The browser exports velocity cells and survey estimates as CSV or XLSX. The
-workbook includes the active analysis settings and, when applicable, a sheet
-of excluded vectors with their rejection reasons. The Python workflow below
-covers additional inputs, calibration and GIS formats.
-
-**Export result graph** downloads a PNG at the width and height you enter.
-It includes the reference frame, retained velocity arrows, a speed legend,
-and a scale bar. Georeferenced exports also include a north arrow. The
-export keeps the aspect ratio of the footage.
-
-**Save project** downloads a `.pxv` file with the frame window, analysis
-settings, masks, scale, survey and calibration choices, filters, and graph
-dimensions. It includes the SRT and imported survey readings. **Load project**
-restores these settings and asks you to select the original video if it is
-needed. Run analysis to regenerate the results.
-
-**Vector filters** update the overlay, speed summaries, survey comparison,
-and vector exports without rerunning the video. Use **Show excluded vectors**
-to locate flags, and **Help bubbles** in the top bar to control inline help.
-
-- **Maximum speed** checks total vector magnitude after applying the metric
-  scale. The Isar preset starts at 3 m/s. Choose a bound appropriate to each site.
-- **PIV local median** compares vector components with nearby PIV cells using
-  the [normalized median test](https://link.springer.com/article/10.1007/s00348-005-0016-6).
-  Start at 2 and inspect flags near genuine gradients. Sparse, one-sided or
-  masked neighbourhoods can leave cells untested.
-- **PTV tracks per cell** lets you require repeat coverage by distinct
-  trajectories. Start at one for sparse seeding. The engine already checks
-  motion consistency across frames. To screen out short tracks, raise
-  **Minimum PTV track length** in the engine settings and rerun.
-  [Heyman (2019)](https://doi.org/10.1016/j.cageo.2019.03.007),
-  [Cierpka et al. (2013)](https://link.springer.com/article/10.1007/s00348-013-1533-3)
-
-### Survey import and velocity errors
-
-The wizard accepts GeoPackage point layers, GeoJSON, CSV, TSV, and pXv survey
-JSON. Select a layer when needed and map its coordinate and velocity columns.
-Use metres per second for velocity and metres for depth. Supply either speed
-or both horizontal components. Specify surface measurements or supply both
-the measurement depth below the surface and the total water depth. A CSV with
-surface readings can use `longitude,latitude,speed_m_s,epsg` as its header.
-
-The review step checks the declared EPSG codes and projects the survey points
-into the video footprint. Enable the proposed reprojection if the coordinate
-systems differ. Supported systems include WGS 84 and ETRS89 geographic
-coordinates, Web Mercator, and WGS 84 or ETRS89 UTM zones. Survey positions are
-transformed. Speed comparisons use scalar magnitudes in a common metric UTM
-system. For a local video with only a metric scale, add mapped control points
-before comparing it with a survey. GPS, camera heading, and water-level
-assumptions can still shift point locations after reprojection.
-
-Choose **Reference only**, **Validation**, or **Calibration and validation**.
-The comparison uses the closest measured cell within the match radius, with
-one reference per cell. Calibration can fit one median speed multiplier per
-method using at least five spaced fit locations and three separate holdout
-locations. It reports baseline and calibrated RMSE on the same holdout.
-References based on roughness fitted from the whole survey are available for
-local comparisons. Direct surface measurements and local profile estimates
-can enter the calibration split.
-
-Vector CSV and XLSX include `speed_error_m_s`, the absolute difference from a
-matched reference. They also include the signed residual, match distance, and
-whether the pair was used for fitting, held out, or used only for comparison.
-Unmatched errors are blank. The error includes reference and spatial matching
-effects. Workbook settings record the coordinate systems and fit diagnostics.
-
-### Full-clip Isar surface-speed estimate
-
-The GeoPackage contains 102 readings at multiple depths. The browser groups
-co-located readings within 0.10 m and uses
-`z/h = 1 - Meas_Depth_m / Total_Depth_m` as the height above the bed. It uses a
-local log profile where the paired readings support it and otherwise extrapolates
-the highest reading using the site roughness. Twenty-nine pairs yield a median
-roughness length of 9.8 mm. One speed is reported per usable position.
-
-- **Survey:** 1.24 m/s median across nine usable surveyed positions in the camera
-  footprint. The 10th–90th percentile across those positions is 0.86–2.02 m/s.
-  Applying the site roughness at all nine gives a 1.31 m/s median. The full
-  GeoPackage gives a 1.24 m/s median across 63 usable positions.
-- **Video:** the 400-frame browser PTV run gave 1.48 m/s median across 43 measured
-  cells along tracer paths, with a 1.28–1.63 m/s 10th–90th percentile. One survey
-  position had a measured tracer cell within 1.5 m. The spatial overlap supports
-  one point comparison and leaves field-wide validation open.
-
-The survey figures describe sampled positions, and the percentile bands describe
-spatial spread. Some near-bed readings have substantial profile uncertainty.
-The video uses projective scale with the gimbal 11.6° off nadir. The assumed
-takeoff-to-water elevation difference is 0 m, so height above water is about
-35.21 m. Changing that height scales the video speeds proportionally and shifts
-the projected locations. The survey readings are independent of this scale.
-Visible gravel affects Isar PIV, so the seeded PTV result is used for the video
-estimate.
-
-Run the JavaScript regression tests with:
-
-```sh
-node --test "web/*.test.mjs"
-```
-
-## Install
-
-```bash
-mamba env create -f environment.yml
-mamba activate pxv-env
-pip install -e .
-```
-
-Or into an existing environment:
-
-```bash
-pip install -e ".[geo,gui,opt]"
-```
-
-`opencv-python-headless` is deliberate: the normal OpenCV wheel bundles its own
-Qt and will clash with PySide6.
-
-## Quick start
-
-```bash
-# what is in the video, and does it carry DJI telemetry?
-pxv info flight.mp4
-
-# how should the frame step and interrogation window be set?
-pxv advise --speed 1.0 --fps 30 --height 40 --hfov 84 --width 3840
-
-# write a starter project, edit it, run it
-pxv init flight.mp4 -o flight.yaml
-pxv run flight.yaml
-
-# fit the scale, then search the Tier 1 parameters against ground truth
-pxv calibrate flight.yaml --write
-
-# or do all of it in the GUI
-pxv gui flight.yaml
-```
-
-A worked example on the lab clip in this repository:
-
-```bash
-pxv run examples/mq-slots.yaml
-```
-
-## The pipeline
-
-Order follows the reference workflow (Broß, Dorthe & Schalko 2026):
-
-Each preprocessing stage is separately switchable and separately reported, so its
-contribution to contrast, fine texture and saturation is visible rather than
-entangled with the others.
-
-1. **Stabilise** against wind-gust drift, using a homography estimated from
-   *static* pixels only, with the moving water masked out (Ioli et al. 2020).
-   pXv re-anchors to a global reference frame periodically rather than chaining
-   frame to frame, and reports the residual so drift is measurable.
-2. **Background**: a static background built as the mean of every Nth frame of
-   the whole clip, subtracted from each frame.
-3. **Normalise**, then **enhance** with CLAHE.
-4. **Velocimetry**: PIV, PTV, or both. A seeding-density diagnostic recommends
-   which, per clip.
-5. **Correlation filter** plus SNR, normalised median test and a texture guard.
-6. **Geometry**: control points, a known distance, or flight height.
-7. **Ground truth**: convert gauged velocities to surface velocity, compare,
-   calibrate.
-8. **Export**.
-
-## Geometry
-
-| Mode | When | Accuracy |
-|---|---|---|
-| `gcp` / `orthophoto` | control points with known world coordinates | best; RANSAC over all points, per-point residuals |
-| `camera` | a DJI `.SRT` with height, gimbal attitude and focal length | full projective rectification with **no ground control at all** |
-| `known_distance` | a known real length visible in frame | exact for a nadir view of a flat surface; ideal in a flume |
-| `height` | flight height and field of view only | uniform scale; valid only within a degree or two of nadir |
-| `none` | no scaling | pixels per frame |
-
-**A locked gimbal is not a nadir gimbal.** DJI reports `gb_pitch`, and a hover
-held steady at, say, -78.4 degrees sits 11.6 degrees off nadir. That makes the
-ground sampling distance vary systematically across the frame, by around 17 % in
-that example, so a single scale factor is wrong no matter how carefully it is
-chosen. `camera` mode builds the image-to-ground homography from the telemetry
-and reports the ground sampling distance at the frame centre, top and bottom so
-the spread is visible. pXv warns whenever the gimbal is more than two degrees off
-nadir.
-
-Ground sampling distance scales linearly with height, so a 2 m error in the
-takeoff-to-water-surface offset at 40 m altitude is a flat 5 % velocity bias
-across the whole field. pXv asks for that offset explicitly rather than assuming
-`rel_alt` is height above water. Where control points are near-collinear, which
-is what happens when they sit along cross-sections, pXv reports the condition
-number and falls back to a similarity transform rather than fitting a degenerate
-homography.
-
-### A second camera stream
-
-`video.secondary_path` accepts a second stream, such as a multispectral or
-thermal payload, showing the same scene through different optics.
-`pxv.geometry.coregister` brings it into the primary image frame. The rig is
-rigid and the gimbal locked, so one homography serves the whole clip;
-correspondences are pooled across several frames because the two renderings can
-look nothing alike.
-
-### DJI telemetry
-
-With Video Captions enabled, a Mavic 3 writes a `.SRT` sidecar next to the `.MP4`
-carrying position, `rel_alt`, `abs_alt`, gimbal yaw/pitch/roll, focal length and
-zoom, once per frame. Note that a single bracket can hold several fields, as in
-`[rel_alt: 35.217 abs_alt: 900.696]` and
-`[gb_yaw: -2.0 gb_pitch: -78.4 gb_roll: 0.0]`; a parser that treats one bracket
-as one field silently drops `abs_alt` and both gimbal angles. `abs_alt` is
-barometric and routinely tens of metres out, so pXv never uses it for scale.
-
-## Ground truth and the profile conversion
-
-Point gauging measures velocity at a fixed fraction of the depth, which is
-neither depth-averaged nor surface velocity, so a single surface coefficient
-alpha is the wrong model.
-
-**Watch the convention.** Standard hydrometric gauging reports depth measured
-*downward from the water surface*, which is why 0.2, 0.6 and 0.8 recur: they are
-the classic two-point and six-tenths positions. Height above the bed is then
-`1 - meas/total`. Set `depth_convention` to say which your file uses; getting it
-backwards inverts the velocity profile. If a file carries `Meas_Depth_m` and
-`Total_Depth_m`, pXv derives the height for you.
-
-Where a vertical carries **two** heights, they determine a logarithmic profile
-completely, with no assumed roughness:
-
-```
-u_surface = u_lower + K * (u_upper - u_lower),   K = ln(1/z1) / ln(z2/z1)
-```
-
-with `z1 < z2` as fractions of depth above the bed. For the standard 0.2 / 0.8
-below-surface pair, `K = 1.161` and the measurement uncertainty is amplified by
-only **1.17**, which makes the extrapolation genuinely usable. Widely separated
-points condition the fit well; closely spaced ones do not.
-
-The default `hybrid` mode uses the paired verticals to estimate the site
-roughness `z0`, takes a robust central value, and applies that to every point,
-including the single-height ones. Conversion always runs on the ground truth,
-never on the computed field, so the exported field stays a true surface field and
-each point carries its own propagated uncertainty into the objective's weighting.
-
-Required GeoPackage attributes: velocity (components or speed), a measurement
-height (`z_over_h`, or `Meas_Depth_m` plus `Total_Depth_m`), and depth. Verticals
-are grouped by position when there is no `vertical_id` column. Without a measured
-standard error, pXv applies `sigma_rel`, which defaults to 5 % of reading, a
-reasonable working figure for an ADV in a natural stream where turbulence
-dominates the instrument specification.
-
-## Calibration tiers
-
-Only Tier 1 reaches the optimizer. If the scale is wrong, an optimizer will
-happily compensate by shrinking the interrogation window until the numbers match,
-producing a meaningless field that validates perfectly.
-
-| Tier | Contents | Treatment |
-|---|---|---|
-| 0 | geometry, frame interval, CRS, stabilisation quality | fixed first, never optimized; **gates the whole search** |
-| 0.5 | one global scale factor | fitted **alone and first**, then frozen; only needed when no dedicated control points exist |
-| 1 | window, overlap, correlation threshold, frame step, preprocessing strength | the actual search space |
-| 2 | profile conversion of the ground truth | handled separately, see above |
-
-Calibration and validation error are always reported separately, over a held-out
-subset of the ground-truth points. With a handful of gauged verticals it is
-trivially easy to overfit, and the report makes that visible.
-
-**The Tier 0 gate.** Before any search runs, pXv checks whether the field is
-measuring the right thing at all, and refuses to continue if it is not:
-
-- the **static-motion check**, the share of cells whose displacement is
-  indistinguishable from zero. The seeding-density diagnostic counts detectable
-  objects but cannot tell a drifting tracer from a stationary stone.
-- the **bias diagnosis**, which separates a scale error from a velocimetry
-  failure. A scale error multiplies every point by the same factor, so the
-  modelled-to-measured ratios cluster tightly and one scale factor fixes them. A
-  velocimetry failure scatters the ratios over orders of magnitude, biased in one
-  direction only.
-
-Optimizing on top of a velocimetry failure is the failure mode the tiers exist to
-prevent: the search will find settings that fit a handful of points by chance and
-report an excellent score for a field that measures the wrong thing.
-
-### PIV for coverage, PTV for accuracy
-
-The two engines do different jobs and the pipeline treats them that way. PIV runs
-the four-stage chain on the natural surface texture and covers the whole water
-area. PTV runs on the raw radiometry and follows the injected tracers, which is
-far more accurate but only where tracers went. So PIV goes on top and PTV
-corrects it.
-
-**Bed-locking is spatial, not global.** Over clear water the bed wins the
-correlation; over rippled water the surface does; and both happen in the same
-frame. Each PIV cell is therefore judged on its own: a cell is dropped when it
-reports a displacement below `grid.piv_static_threshold_px` in at least
-`grid.piv_static_fraction` of the pairs where it produced a vector at all.
-Persistence is what separates a stationary bed from genuinely slow water, which
-fluctuates.
-
-PIV cells are classified from the temporal structure of their own vectors, because
-a displacement threshold cannot separate a stationary bed from genuinely slow
-water: both report small numbers, and what separates them is whether the small
-numbers persist. Cells that alternate between the two are estimated from their
-moving samples alone, since a median over both populations reports a speed that
-was never observed.
-
-`peak_find` also returns the correlation at zero lag, the direct fingerprint of a
-stationary pattern, and the run logs it per cell class. On the Isar clip even
-*clean* cells sit at 0.79, meaning the bed contaminates nearly every window rather
-than a separable subset. Where that is true, PIV cannot recover the surface
-velocity and no post-processing changes it: the lever is seeding density.
-
-**Then PTV corrects what survives.** `correct_piv_with_ptv` fits one gain from the
-PIV cells adjacent to a PTV cell and applies it to the PIV-only cells, tagging
-them `piv_corrected`. A single gain rather than a per-cell one, because a handful
-of overlapping cells cannot support anything richer, and a gain outside 1/4 to 4
-is refused as evidence that the two engines are measuring different things.
-
-Every drop, correction and refusal is logged, never silent.
-
-### Sparse fields and streamlines
-
-A tracer pulse leaves vectors along the paths the tracers took, so binning gives
-isolated cells, and a streamline that cannot step from one cell to the next stops
-immediately: a real measurement renders as a handful of stubs.
-`grid.interpolate_radius_px` fills cells within a bounded distance of a measured
-one. Filled cells are tagged as interpolated, carry a zero sample count, are
-excluded from every statistic and from the health checks, and are exported with
-`source = "interpolated"`. The figure caption separates measured from rendered
-coverage.
-
-### Seeded tracers
-
-Injected tracers are far brighter than anything else on the water and have a
-known physical size, so `ptv.detector: bright` thresholds on brightness and area
-rather than using a band-pass, which responds to sun glint and to the bed just as
-strongly. `ptv.use_raw` keeps that detector on the raw radiometry: the contrast
-stretch that PIV needs pushes noise to saturation and yields thousands of false
-detections per frame.
-
-Find the seeded window before analysing: tracer density varies enormously over a
-clip, and a window chosen before injection measures only the riverbed.
-
-Two things that look like they should help and do not, both measured rather than
-assumed:
-
-- **Running the preprocessing chain before tracer detection.** It exists to
-  amplify faint texture so correlation can lock onto it. Tracers are the opposite
-  case, the brightest thing in the frame, so amplifying faint texture destroys the
-  contrast that identifies them. On the Isar clip the chain turns a 33x
-  tracer-to-background contrast into 1.3x, and adding CLAHE or an unsharp mask
-  inverts it entirely.
-- **Ensemble correlation.** Averaging correlation planes over many pairs is the
-  standard remedy for sparse seeding, but it reinforces whatever is consistent
-  across pairs. Where a stationary bed competes with the tracers, that is the bed.
-
-### Clear water over a visible bed
-
-This is the hard case, and it is common on gravel-bed rivers. When the bed is
-visible through the surface it is the strongest texture in the frame, so
-correlation locks onto it and reports near-zero velocity with high confidence. No
-parameter choice fixes this, because the bed really is the dominant signal.
-
-Suppressing the zero-lag correlation peak looks like a fix and is not: it pins
-the reported displacement at whatever lies just outside the exclusion radius, so
-the answer stops changing with the frame interval. That is a tell, and pXv does
-not offer it.
-
-What does work is seeding the flow, or restricting the analysis region to water
-whose surface is actually textured. The static-motion check and the bias
-diagnosis are there to tell you which situation you are in.
-
-## Analysis region
-
-A rectangular ROI cannot exclude a gravel bar in the middle of a braided reach,
-and correlation over dry ground reports a confident zero. `analysis.include`
-takes a union of polygons and `analysis.exclude` cuts holes in them; both are
-drawn in the GUI viewport.
-
-Automatic water detection is offered only as a starting point. On a sunlit
-gravel-bed river, water and dry bar overlap in both brightness and colour, and
-temporal variance does not separate them either because residual camera motion
-makes every edge flicker. Draw the polygon.
-
-## Exports
-
-- **UGRID NetCDF** mesh, read natively by QGIS through MDAL, with arrow,
-  streamline and particle-trace rendering
-- **GeoTIFF**, three bands: `u`, `v`, `magnitude`
-- **GeoPackage** points with `u`, `v`, `magnitude`, `direction`, `n_samples`,
-  `source`
-- **Streamline JPG** coloured by speed over a 50 % opacity frame of the footage,
-  with a colourbar, scale bar and north arrow, plus a `.jgw` world file and
-  `.prj` so it drops into QGIS georeferenced. Cells with no data are masked
-  rather than filled, so streamlines stop where the measurement stopped, and the
-  figure carries its own coverage and static-motion verdict
-- **Quicklook PNG**: speed map, vector overlay, sample count, stabilisation
-  residual
-
-Colour maps are restricted to perceptually uniform, colour-vision-deficiency-safe
-sequential maps; `cividis` is the default and rainbow maps are refused.
-
-## Reproducibility
-
-Every run is fully described by one YAML project file. The GUI only edits that
-file, and `pxv run project.yaml` reproduces the run headlessly, so nothing the
-GUI can do is unreachable from the command line.
-
-## Tests
-
-```bash
-python -m pytest tests -q
-```
-
-The suite checks the numerics against analytic answers: PIV and PTV recover known
-synthetic displacements, stabilisation recovers known shifts, the correlation
-plane matches a manual Pearson coefficient at zero lag, and the profile
-conversion is exact against an analytic logarithmic profile.
-
-## References
-
-- Broß, F., Dorthe, C., Schalko, I., 2026. Hydrodynamic and ecological effects of
-  engineered logjams: Insights from field observations. *Earth Surface Processes
-  and Landforms* 51, e70322. https://doi.org/10.1002/esp.70322
-- Ioli, F., Pinto, L., Passoni, D., Nova, V., Detert, M., 2020. Evaluation of
-  airborne image velocimetry approaches using low-cost UAVs in riverine
-  environments. *ISPRS Archives* XLIII-B2-2020, 597-604.
-  https://doi.org/10.5194/isprs-archives-XLIII-B2-2020-597-2020
-- Heyman, J., 2019. TracTrac: A fast multi-object tracking algorithm for motion
-  estimation. *Computers & Geosciences* 128, 11-18.
-  https://doi.org/10.1016/j.cageo.2019.03.007
-- Westerweel, J., Scarano, F., 2005. Universal outlier detection for PIV data.
-  *Experiments in Fluids* 39, 1096-1100.
-
-## License
-
-MIT. The vendored TracTrac reference in `tractracSources/` is also MIT; see
-`tractracSources/VENDORED.md`.
+Open [the local app](http://127.0.0.1:8040/) in Chrome or Edge.
+See [Installation](https://pxv.readthedocs.io/en/latest/installation.html)
+for Python setup.
+
+## Usage
+
+Select **Load Isar example**, then **Run analysis**. A fresh checkout includes
+a 30-frame, 2.63 MB seeded clip, matching DJI captions, and the survey. The
+app uses the full clip when it is present. Set `PXV_ISAR_FIXTURE=1` to
+select the short clip explicitly.
+
+Use **Import** to analyze your own footage. **Save project** and **Load
+project** preserve settings in a `.pxv` file. **Export result graph**
+downloads a WebP or JPEG with a speed legend, scale bar, and a north arrow
+when the footage is georeferenced. CSV and XLSX contain the numeric results.
+
+The [Usage guide](https://pxv.readthedocs.io/en/latest/usage.html) covers the
+browser app, survey comparison, Isar example, and Python workflow.
+
+## Code Documentation
+
+The [Code Documentation](https://pxv.readthedocs.io/en/latest/code-documentation.html)
+includes a UML sequence diagram and API references generated from JavaScript
+JSDoc and Python docstrings. Run the JavaScript unit tests with
+`node --test "web/*.test.mjs"`. GitHub Actions also processes the bundled Isar
+example in Chrome and builds the documentation.
+
+## License and Disclaimer
+
+pXv and the vendored TracTrac reference are distributed under their respective
+MIT licenses. The software is provided as is, without warranty.
+See the [pXv license](LICENSE), [TracTrac notice](tractracSources/LICENSE),
+and [License and Disclaimer](https://pxv.readthedocs.io/en/latest/license.html).

@@ -98,6 +98,10 @@ function pivResiduals(vectors, { spacing, frameInterval, include, exclude }) {
  * Screen projected output vectors without modifying the engine result.
  * PIV residuals compare image displacements using a 0.1 px floor, following
  * Westerweel & Scarano (2005), doi:10.1007/s00348-005-0016-6.
+ *
+ * @param {Array<object>} vectors - Measured velocities with image and projected coordinates.
+ * @param {object} [options] - Speed, PIV median, and PTV track support thresholds.
+ * @returns {object} Accepted and rejected vectors with filter counts.
  */
 export function filterVectors(vectors, {
   units = 'px', maxSpeed = null, cellSize = 32, pivGridStep = cellSize,

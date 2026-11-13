@@ -156,6 +156,12 @@ export function datumNote(from, to) {
 /**
  * Reproject an X/Y position. Geographic input and output always use longitude
  * first. WGS 84 ↔ ETRS89 uses the EPSG:1149 approximate datum equivalence.
+ *
+ * @param {number} x - Easting in metres or longitude in degrees.
+ * @param {number} y - Northing in metres or latitude in degrees.
+ * @param {number|string} from - Source EPSG code.
+ * @param {number|string} to - Target EPSG code.
+ * @returns {Array<number>} Transformed coordinates in X, Y order.
  */
 export function reprojectPoint(x, y, from, to) {
   const source = describeCrs(from)
@@ -172,6 +178,13 @@ export function reprojectPoint(x, y, from, to) {
   return [lon, lat]
 }
 
+/**
+ * Transform survey positions to a target CRS and retain their source coordinates.
+ *
+ * @param {object} survey - Normalized survey rows with a source EPSG code.
+ * @param {number|string} to - Target EPSG code.
+ * @returns {object} Survey with transformed rows and any coordinate warnings.
+ */
 export function reprojectSurvey(survey, to) {
   const from = parseEpsg(survey.epsg)
   const epsg = parseEpsg(to)

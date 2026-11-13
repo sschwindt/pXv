@@ -160,7 +160,13 @@ function surfaceFlag(value) {
   return null
 }
 
-/** Normalize survey positions, velocities in m/s, and optional depth and uncertainty. */
+/**
+ * Normalize survey positions, speeds in metres per second, and optional depths and uncertainty.
+ *
+ * @param {string|object} source - Survey text, parsed GeoJSON, or the result of ``inspectSurvey``.
+ * @param {object} [options] - Filename, EPSG override, column mapping, and measurement type.
+ * @returns {object} Normalized survey rows, EPSG code, and import warnings.
+ */
 export function parseSurvey(source, { filename = '', epsg = null, measurement = 'auto', mapping = {} } = {}) {
   const info = Array.isArray(source?.records) && source.mapping ? source : inspectSurvey(source, { filename })
   const fields = { ...info.mapping, ...mapping }

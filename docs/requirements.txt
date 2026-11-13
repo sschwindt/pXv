@@ -2,3 +2,5 @@ Sphinx==8.2.3
 myst-parser==4.0.1
 sphinx-rtd-theme==3.1.0
 sphinxcontrib-mermaid==2.1.1
+sphinx-js==5.0.3
+numpy==2.3.5

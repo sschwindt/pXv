@@ -1,13 +1,7 @@
 # Browser app
 
-From the repository checkout, start the app with Node.js 24 or later.
-
-```sh
-node web/server.mjs
-```
-
-Open [pXv](http://127.0.0.1:8040/) in Chrome or Edge. Video analysis runs
-in the browser. The local server reads GeoPackage point layers.
+Start the app as described in [Installation](installation.md). Video
+analysis runs in the browser. The local server reads GeoPackage point layers.
 
 ## Import and analyze
 
@@ -43,14 +37,27 @@ The `speed_error_m_s` column in CSV and XLSX gives the absolute speed
 difference at a matched location. It is blank where a reference match is
 unavailable. You can change the survey mode and output filters after a run.
 
+## Filter vectors
+
+Use **Maximum speed** to set a physical limit for the site. The Isar
+preset starts at 3 m/s. **PIV local median** checks whether each vector
+agrees with its neighbours. Start with a threshold of 2 and review
+exclusions near bends or shear layers. **PTV tracks per cell** requires
+repeat observations from distinct tracers. Raising this setting can reduce
+coverage when seeding is sparse.
+
+**Show excluded vectors** marks rejected cells on the map. Use **Help
+bubbles** to show or hide guidance for the controls.
+
 ## Save settings and export results
 
 Use **Save project** to download a `.pxv` file with frame and engine settings,
-masks, scale, the survey, filters, and graph dimensions. **Load project**
+masks, scale, the survey, filters, and graph export settings. **Load project**
 restores the settings and prompts for the original footage when needed.
 Run analysis to regenerate the results.
 
-Select **Export result graph** after a run. Enter the PNG width and height
-in pixels. The export includes the reference image, velocity vectors, a
-speed legend, and a scale bar. Georeferenced exports also show a north arrow.
+Select **Export result graph** after a run. Enter the width and height
+in pixels and choose WebP or JPEG and the image quality. The export includes
+the reference image, velocity vectors, pink survey points, a speed legend,
+and a scale bar. Georeferenced exports also show a north arrow.
 Use the CSV or XLSX buttons to export the numeric results.

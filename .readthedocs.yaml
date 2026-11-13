@@ -4,6 +4,10 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.12"
+    nodejs: "24"
+  jobs:
+    post_install:
+      - npm install --no-save --package-lock=false jsdoc@4.0.5
 
 sphinx:
   configuration: docs/conf.py

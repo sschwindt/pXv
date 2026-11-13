@@ -20,5 +20,18 @@ pXv uses the measurement depths and a logarithmic profile to estimate
 the reference speed at the surface.
 
 The short clip tests the workflow with real footage and limited tracer
-coverage. Use the [development notes](DEVELOPMENT_PLAN.md) for the longer
-Isar analysis and its spatial comparison with the survey.
+coverage. Use the [survey comparison controls](browser.md#compare-with-a-survey)
+to inspect which locations have nearby measured vectors.
+
+## Full footage comparison
+
+The 400-frame browser PTV run covered source frames 1250–1649. The median
+was 1.48 m/s across 43 cells along tracer paths. The survey median was
+1.24 m/s across nine usable positions in the video footprint. One
+survey position matched a tracer cell within 1.5 m, with a speed
+difference of 0.35 m/s. The comparison supports a local check.
+
+The projective video scale uses the DJI gimbal tilt and assumes takeoff
+was level with the water, giving a camera height of about 35.21 m. The
+visible gravel bed can influence PIV correlation, so this example uses
+seeded tracer tracking.

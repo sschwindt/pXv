@@ -269,9 +269,13 @@
         <label>Width (px)<input id="graph-width" type="number" step="1" value="1920" required></label>
         <label>Height (px)<input id="graph-height" type="number" step="1" value="1080" required></label>
       </div>
+      <div class="two-up">
+        <label>Image format<select id="graph-format"><option value="webp">WebP</option><option value="jpg">JPEG (.jpg)</option></select></label>
+        <label>Quality (%)<input id="graph-quality" type="number" min="1" max="100" step="1" value="86" required></label>
+      </div>
       <p id="graph-units" class="hint"></p>
       <p id="graph-error" class="status error" role="alert"></p>
-      <div class="wizard-actions"><button class="primary" type="submit" id="download-graph">Download PNG</button></div>
+      <div class="wizard-actions"><button class="primary" type="submit" id="download-graph">Download image</button></div>
     </form>
   </dialog>
   <dialog id="project-dialog" aria-labelledby="load-project-title" class="settings-dialog">

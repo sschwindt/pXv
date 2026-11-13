@@ -1,4 +1,4 @@
-import { validateGraphSize } from './result-graph.mjs'
+import { defaultGraphQuality, validateGraphSize } from './result-graph.mjs'
 import { describeCrs } from './spatial-reference.mjs'
 
 export const projectFileMaxBytes = 96 * 1024 * 1024
@@ -99,6 +99,8 @@ function validSettings(value, video) {
   const minArea = integer(settings.minArea, 'settings.minArea', 1)
   return {
     start, stop, step, graphWidth, graphHeight, minArea,
+    graphFormat: oneOf(settings.graphFormat ?? 'webp', ['webp', 'jpg'], 'settings.graphFormat'),
+    graphQuality: integer(settings.graphQuality ?? Math.round(defaultGraphQuality * 100), 'settings.graphQuality', 1, 100),
     method: oneOf(settings.method, methods, 'settings.method'),
     scaleMode: oneOf(settings.scaleMode, scaleModes, 'settings.scaleMode'),
     offset: number(settings.offset, 'settings.offset'),
@@ -242,12 +244,24 @@ function checkFileSize(text) {
   }
 }
 
+/**
+ * Validate settings and serialize a versioned pXv project.
+ *
+ * @param {object} project - Analysis, survey, georeference, and video descriptor.
+ * @returns {string} JSON text suitable for saving to a ``.pxv`` file.
+ */
 export function serializeProject(project) {
   const text = JSON.stringify(validate(project), null, 2)
   checkFileSize(text)
   return text + '\n'
 }
 
+/**
+ * Parse a saved pXv project and validate the recognized settings.
+ *
+ * @param {string} text - Contents of a ``.pxv`` project.
+ * @returns {object} A validated project with version and format information.
+ */
 export function parseProject(text) {
   if (typeof text !== 'string') throw new Error('Choose a pXv project file.')
   checkFileSize(text)

@@ -169,7 +169,14 @@ function extrapolate(group, roughness, minSubmergence) {
   };
 }
 
-/** Infer surface speeds from the measured height above the bed at each vertical. */
+/**
+ * Estimate surface speed for each surveyed vertical.
+ * Subsurface readings are extrapolated with a logarithmic velocity profile.
+ *
+ * @param {Array<object>} rows - Survey positions, velocities, and optional measurement depths.
+ * @param {object} [options] - Vertical grouping tolerance and assumptions for profile fits.
+ * @returns {object} Surface estimates, roughness, and fit diagnostics.
+ */
 export function analyzeSurvey(rows, options = {}) {
   const settings = { ...defaults, ...options };
   const { groups, excludedRows } = groupVerticals(rows, settings);

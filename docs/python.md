@@ -1,20 +1,15 @@
 # Python workflow
 
-Install the package from the repository checkout with Python 3.10 or later.
-
-```sh
-python -m pip install -e ".[geo,gui,opt]"
-```
-
-The extras provide GIS exports, the Qt interface, and parameter search. The
-base install runs the core processing pipeline.
-
-Inspect the video and create a YAML project.
+After [installing the package](installation.md), inspect the video and
+create a YAML project.
 
 ```sh
 pxv info flight.mp4
 pxv init flight.mp4 -o flight.yaml
 ```
+
+For an initial frame-step and window estimate, use `pxv advise` with
+the expected speed, frame rate, camera height, field of view, and image width.
 
 Set the frame range, geometry, and analysis method in `flight.yaml`. If
 using DJI captions, keep the SRT beside the video. Use the configured geometry
@@ -30,5 +25,5 @@ can fit the scale and search processing parameters. Confirm the survey depth
 convention and review the holdout errors before using the calibrated project.
 Supported exports include GeoPackage, GeoTIFF, and UGRID NetCDF.
 
-See the [development notes](DEVELOPMENT_PLAN.md) for the camera model,
-velocity-profile conversion, and method evaluation.
+See the [Python API](python-api.rst) for the camera model and
+velocity-profile conversion.

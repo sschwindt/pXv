@@ -161,6 +161,12 @@ function readCodec(view, entry) {
   return { description, codec, codecLabel }
 }
 
+/**
+ * Read an MP4, MOV, or M4V video track and index its frames without decoding them.
+ *
+ * @param {Blob|string} source - Local footage or a URL that supports byte ranges.
+ * @returns {Promise<object>} Video metadata, decoder configuration, and samples with presentation timing.
+ */
 export async function openMp4(source) {
   const reader = await sourceReader(source)
   let movie
@@ -213,6 +219,18 @@ export async function verifyVideoDecoder(movie) {
   return config
 }
 
+/**
+ * Decode a frame window in presentation order using WebCodecs.
+ * Each frame is closed after the callback returns.
+ *
+ * @param {object} movie - Video metadata returned by ``openMp4``.
+ * @param {object} selection - Frame selection and synchronous callback.
+ * @param {number} selection.start - First frame index, zero-based.
+ * @param {number} selection.stop - Exclusive end frame index.
+ * @param {number} [selection.step=1] - Interval between selected frames.
+ * @param {function} selection.onFrame - Receives the VideoFrame and its index.
+ * @returns {Promise<void>} Resolves after all selected frames have been delivered.
+ */
 export async function decodeWindow(movie, { start, stop, step = 1, onFrame }) {
   if (![start, stop, step].every(Number.isInteger) || start < 0 || step < 1 ||
       stop <= start || stop > movie.frameCount) throw new Error('Frame selection is outside the video.')

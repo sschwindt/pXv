@@ -23,7 +23,15 @@ function subtitleTime(hours, minutes, seconds, millis) {
   return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds) + Number(millis) / 1000;
 }
 
-/** Read DJI subtitle timing and summarize telemetry near the stabilization reference frame. */
+/**
+ * Read DJI subtitle timing and summarize telemetry near the stabilization reference frame.
+ *
+ * @param {string} text - DJI SRT captions.
+ * @param {object} [window] - Optional interval of caption frames.
+ * @param {number} [window.startFrame=0] - Inclusive, zero-based frame index.
+ * @param {number} [window.endFrame] - Exclusive frame index, when supplied.
+ * @returns {object} Frame timing and camera telemetry, with missing values set to null.
+ */
 export function parseDjiSrt(text, { startFrame = 0, endFrame = Infinity } = {}) {
   const samples = [];
   for (const block of text.trim().split(/\r?\n[\t ]*\r?\n/)) {
@@ -84,7 +92,14 @@ function displacementFrom(toWorld) {
   };
 }
 
-/** Project a DJI camera ray onto the local horizontal water surface. */
+/**
+ * Project DJI camera rays onto a horizontal water surface.
+ *
+ * @param {object} camera - Image dimensions, camera height and optics, orientation, and optional location.
+ * @param {number} camera.heightAboveTakeoff - Aircraft height above takeoff, in metres.
+ * @param {number} [camera.waterOffset=0] - Takeoff elevation relative to the water surface, in metres.
+ * @returns {object} Image and map transforms, velocity conversion, and ground sampling distances.
+ */
 export function cameraGeometry({ width, height, heightAboveTakeoff, waterOffset = 0,
   focal35, yaw = 0, pitch = -90, roll = 0, latitude, longitude, epsg: requestedEpsg }) {
   if (![width, height, heightAboveTakeoff, waterOffset, focal35, yaw, pitch, roll].every(Number.isFinite)) {
@@ -232,7 +247,15 @@ function fitControlPoints(source, target, perspective) {
   return { toWorld, toImage };
 }
 
-/** Fit a water-plane map from three affine or at least four projective control points. */
+/**
+ * Fit a water-plane map from three affine or at least four projective control points.
+ *
+ * @param {object} control - Corresponding image and map positions in the same order.
+ * @param {Array<Array<number>>} control.image - Image coordinates in pixels.
+ * @param {Array<Array<number>>} control.world - Positions in the stated map CRS.
+ * @param {number|string} control.epsg - Input coordinate reference system.
+ * @returns {object} Forward and inverse transforms and fit residuals in metres.
+ */
 export function controlPointGeometry({ image, world, epsg: inputCode, width, height }) {
   const validPoint = point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite);
   if (!Array.isArray(image) || !Array.isArray(world) || image.length < 3 || world.length !== image.length ||

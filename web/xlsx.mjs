@@ -153,7 +153,12 @@ function zip(files) {
   return new Blob([...entries, ...directory, end.buffer], { type: xlsxType })
 }
 
-/** Create a local XLSX export from one or more flat tables. */
+/**
+ * Create a local XLSX export from one or more flat tables.
+ *
+ * @param {Array<object>} sheets - Worksheets with a name, column headers, and rows.
+ * @returns {Blob} An XLSX workbook.
+ */
 export function createWorkbook(sheets) {
   if (!sheets.length || sheets.length > 65530) throw new Error('Choose a valid number of Excel sheets.')
   const names = new Set()

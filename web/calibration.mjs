@@ -122,6 +122,11 @@ function summarize(matches, total, radius, baseline = false) {
  * represent the water surface. The result contains only collocated speed
  * residuals, which combine video, reference, and representativeness errors.
  * A spatial holdout is reserved independently of the measured velocities.
+ *
+ * @param {Array<object>} vectors - Measured velocities in a projected metric CRS.
+ * @param {Array<object>} verticals - Survey surface estimates in the same CRS.
+ * @param {object} [options] - Survey mode, match radius, separation, and holdout fraction.
+ * @returns {object} Output vectors, match residuals, validation metrics, and fit status.
  */
 export function assessVelocity(vectors, verticals, {
   mode = 'validation', radius = 1.5, separation = 2 * radius, holdoutFraction = 0.3,
