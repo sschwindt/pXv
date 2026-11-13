@@ -1,5 +1,7 @@
 # pXv
 
+[Documentation on Read the Docs](https://pxv.readthedocs.io/en/latest/)
+
 Mixed PIV and PTV surface velocimetry for drone and lab video, with a local
 JavaScript browser app and a Python workflow for calibration and GIS exports.
 
@@ -32,11 +34,17 @@ the Isar example from the checkout. Video, SRT, and text surveys are read in
 the browser. GeoPackage files are parsed by the local server. Use `PXV_PORT`
 to override the default port.
 
-The **Isar River** preset loads the RGB MP4 and matching DJI SRT from
-`examples/isar-20260804/`, plus the FlowTracker2 points in `IsarAug2026.gpkg`.
-The footage is Git-ignored. Place
-`DJI_20260804150234_0002_D.MP4` beside its SRT if working from a fresh clone.
-Select **Run analysis** to track the seeded tracers in frames 1250 through 1649.
+The **Isar River** preset runs on a bundled 30-frame seeded clip in
+`examples/isar-ci/`, its matching DJI SRT, and the original FlowTracker2 points
+in `examples/isar-20260804/IsarAug2026.gpkg`. Select **Run analysis** to track the
+tracers. The short clip comes from frames 1290–1319 of the original footage and
+keeps the source resolution and frame rate. GitHub Actions runs this example
+and uploads the exported results.
+
+To analyze frames 1250–1649 from the full footage, place
+`DJI_20260804150234_0002_D.MP4` beside its SRT in `examples/isar-20260804/`.
+The app prefers the full clip when present. Set `PXV_ISAR_FIXTURE=1` when
+starting the server to run the short example explicitly.
 
 For another clip, select **Import** and choose a regular MP4, MOV or M4V.
 The browser must support the file’s H.264 or H.265 video codec. Add a matching
@@ -120,7 +128,7 @@ whether the pair was used for fitting, held out, or used only for comparison.
 Unmatched errors are blank. The error includes reference and spatial matching
 effects. Workbook settings record the coordinate systems and fit diagnostics.
 
-### Isar surface-speed estimate
+### Full-clip Isar surface-speed estimate
 
 The GeoPackage contains 102 readings at multiple depths. The browser groups
 co-located readings within 0.10 m and uses

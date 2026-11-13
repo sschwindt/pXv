@@ -223,7 +223,8 @@ tractrac-env/
 *-out/
 .pxv-cache/
 
-# large sample media: keep the telemetry and survey data, not the footage
+# Large sample media stays local. Keep the compact Isar example in Git.
 examples/**/*.MP4
 examples/**/*.mp4
+!examples/isar-ci/isar-ci.mp4
 !tractracSources/ssc-samples/*.mp4

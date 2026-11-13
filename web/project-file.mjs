@@ -61,6 +61,7 @@ function validVideo(value) {
     height: integer(video.height, 'video.height', 1, 65535),
     frameCount: integer(video.frameCount, 'video.frameCount', 2),
     fps: number(video.fps, 'video.fps', Number.MIN_VALUE),
+    ...(kind === 'isar' ? { variant: oneOf(video.variant ?? 'full', ['full', 'fixture'], 'video.variant') } : {}),
     ...(kind === 'local' ? {
       size: integer(video.size, 'video.size', 1),
       lastModified: optional(video.lastModified, value => integer(value, 'video.lastModified', Number.MIN_SAFE_INTEGER)),
@@ -78,6 +79,7 @@ export function videoDescriptor(source, isExample, metadata) {
     height: metadata?.height,
     frameCount: metadata?.frameCount,
     fps: metadata?.fps,
+    variant: metadata?.variant,
   })
 }
 

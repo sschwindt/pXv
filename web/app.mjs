@@ -189,8 +189,11 @@ function setSurvey(data) {
 
 async function openSource(source, isExample, imported, project) {
   const generation = ++state.generation
+  state.worker?.terminate()
+  state.worker = null
   state.source = source
   state.example = isExample
+  state.exampleVariant = project?.video.variant ?? null
   state.result = null
   state.meta = null
   state.sourceReady = !isExample || Boolean(imported)
@@ -257,15 +260,29 @@ async function openSource(source, isExample, imported, project) {
   setBusy(false)
   status('')
   projectStatus(project ? 'Project loaded. Run analysis to regenerate the results.' : '')
-  makeWorker(source)
   updateControls()
   render()
   if (isExample && !imported) {
-    const results = await Promise.allSettled([read('/example/captions', 'text'), read('/example/survey', 'json')])
+    let config
+    try {
+      config = await read('/example/config', 'json')
+    } catch (error) {
+      if (generation === state.generation) status(error.message, true)
+      return
+    }
+    if (generation !== state.generation) return
+    state.exampleVariant = config.variant
+    const query = '?variant=' + encodeURIComponent(config.variant)
+    state.source = '/example/video' + query
+    $('start').value = config.start
+    if (config.stop !== null) $('stop').value = config.stop
+    $('project-subtitle').textContent = '4 August 2026 · ' + (config.fixture ? 'Short seeded clip' : 'Seeded drone survey')
+    makeWorker(state.source)
+    const results = await Promise.allSettled([read('/example/captions' + query, 'text'), read('/example/survey', 'json')])
     if (generation !== state.generation) return
     if (results[0].status === 'fulfilled' && !state.captions) {
       state.captions = results[0].value
-      state.captionsName = 'DJI_20260804150234_0002_D.SRT'
+      state.captionsName = config.captionsName
     }
     if (results[1].status === 'fulfilled' && !state.surveyData) {
       try { setSurvey({ ...results[1].value, name: 'IsarAug2026.gpkg' }) } catch (error) { status(error.message, true) }
@@ -275,6 +292,9 @@ async function openSource(source, isExample, imported, project) {
     state.sourceReady = true
     $('save-project').disabled = !state.meta || state.busy
     render()
+  } else {
+    if (state.exampleVariant === 'fixture') $('project-subtitle').textContent = '4 August 2026 · Short seeded clip'
+    makeWorker(source)
   }
 }
 
@@ -287,6 +307,7 @@ function receive(data) {
     $('start').max = data.frameCount - 2
     $('stop').max = data.frameCount
     if (!state.example && !reopened && !state.restoringProject) $('stop').value = Math.min(data.frameCount, 150)
+    if (state.exampleVariant === 'fixture' && !reopened && !state.restoringProject) $('stop').value = data.frameCount
     $('save-project').disabled = !state.sourceReady || state.busy
     $('video-meta').textContent = data.width + ' × ' + data.height + ' · ' + fixed(data.fps) +
       ' fps · ' + data.frameCount.toLocaleString() + ' frames'
@@ -938,7 +959,7 @@ $('save-project').addEventListener('click', () => {
   try {
     const settings = readProjectSettings()
     const project = {
-      video: videoDescriptor(state.source, state.example, state.meta), settings,
+      video: videoDescriptor(state.source, state.example, { ...state.meta, variant: state.exampleVariant }), settings,
       engineOptions: state.engineOptions, control: state.control, survey: state.surveyData,
       captions: state.captions ? { name: state.captionsName, text: state.captions } : null,
     }
@@ -989,7 +1010,7 @@ $('project-file').addEventListener('change', async event => {
     pendingProject = project
     const { video } = project
     if (video.kind === 'isar') {
-      pendingVideo = '/example/video'
+      pendingVideo = '/example/video?variant=' + encodeURIComponent(video.variant)
       $('project-file-info').textContent = file.name + ' uses the bundled Isar footage.'
     } else {
       pendingVideo = matchesProjectVideo(video, state.source) ? state.source : null

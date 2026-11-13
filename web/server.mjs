@@ -10,6 +10,11 @@ const web = new URL('./', import.meta.url)
 const example = new URL('../examples/isar-20260804/', web)
 const isarVideo = 'DJI_20260804150234_0002_D.MP4'
 const isarCaptions = isarVideo.replace(/\.MP4$/, '.SRT')
+const isarFixture = new URL('../examples/isar-ci/', web)
+const isarVariants = {
+  full: { start: 1250, stop: 1650, video: new URL(isarVideo, example), captions: new URL(isarCaptions, example), captionsName: isarCaptions },
+  fixture: { start: 0, video: new URL('isar-ci.mp4', isarFixture), captions: new URL('isar-ci.srt', isarFixture), captionsName: 'isar-ci.srt' },
+}
 const port = Number(process.env.PXV_PORT ?? 8040)
 const staticFiles = new Map([
   ['/', ['index.html', 'text/html']],
@@ -50,6 +55,17 @@ async function sendFile(req, res, file, type, ranges = false) {
   res.on('close', () => stream.destroy())
   stream.on('error', () => res.destroy())
   stream.pipe(res)
+}
+
+async function isarVariant(requested) {
+  if (requested === 'full' || requested === 'fixture') return requested
+  if (process.env.PXV_ISAR_FIXTURE === '1') return 'fixture'
+  try {
+    if ((await stat(isarVariants.full.video)).isFile()) return 'full'
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  return 'fixture'
 }
 
 async function importGeoPackage(req, res, url) {
@@ -115,10 +131,19 @@ const server = createServer(async (req, res) => {
       const survey = readSurvey(fileURLToPath(new URL('IsarAug2026.gpkg', example)))
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' })
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(survey))
-    } else if (path === '/example/video') {
-      await sendFile(req, res, new URL(isarVideo, example), 'video/mp4', true)
-    } else if (path === '/example/captions') {
-      await sendFile(req, res, new URL(isarCaptions, example), 'text/plain')
+    } else if (['/example/video', '/example/captions', '/example/config'].includes(path)) {
+      const variant = await isarVariant(url.searchParams.get('variant'))
+      const { video, captions, start, stop, captionsName } = isarVariants[variant]
+      if (path === '/example/config') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        res.end(req.method === 'HEAD' ? undefined : JSON.stringify({
+          variant, fixture: variant === 'fixture', start, stop: stop ?? null, captionsName,
+        }))
+      } else if (path === '/example/video') {
+        await sendFile(req, res, video, 'video/mp4', true)
+      } else {
+        await sendFile(req, res, captions, 'text/plain')
+      }
     } else if (staticFiles.has(path)) {
       const [file, type] = staticFiles.get(path)
       await sendFile(req, res, new URL(file, web), type + '; charset=utf-8')

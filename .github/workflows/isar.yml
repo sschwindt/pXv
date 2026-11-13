@@ -1,0 +1,47 @@
+name: Isar example
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Run JavaScript tests
+        run: npm test
+      - name: Install browser test driver
+        run: npm install --no-save --package-lock=false playwright@1.62.1
+      - name: Process the Isar example in Chrome
+        run: node tests/browser/isar-smoke.mjs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: isar-example
+          path: examples/isar-ci-out/
+          if-no-files-found: error
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Build Read the Docs pages
+        run: |
+          python -m pip install -r docs/requirements.txt
+          python -m sphinx -W -n -b html docs docs/_build/html
