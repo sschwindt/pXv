@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
+import { openAsBlob } from 'node:fs'
 import { mkdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -39,18 +40,17 @@ async function startServer() {
 }
 
 async function saveDownload(page, name, click) {
-  const download = page.waitForEvent('download')
-  await click()
+  const [download] = await Promise.all([page.waitForEvent('download'), click()])
   const path = join(output, name)
-  await (await download).saveAs(path)
+  await download.saveAs(path)
   return path
 }
 
 const { size } = await stat(fixture)
-assert.ok(size > 0 && size < 10 * 1024 * 1024, 'The example MP4 must stay below 10 MiB.')
-const fixtureMovie = await openMp4(new Blob([await readFile(fixture)]))
+assert.ok(size > 0 && size < 5 * 1024 * 1024, 'The example MP4 must stay below 5 MiB.')
+const fixtureMovie = await openMp4(await openAsBlob(fixture))
 const stop = fixtureMovie.frameCount
-assert.ok(stop > 10 && stop <= 150, 'The example should run in a short frame window.')
+assert.ok(stop > 10 && stop <= 60, 'The example should run in a short frame window.')
 await mkdir(output, { recursive: true })
 const { server, lines, exit, url } = await startServer()
 let browser
@@ -107,8 +107,11 @@ try {
   assert.deepEqual(uncaught, [])
   console.log('Isar fixture: ' + stop + ' frames, ' + rows.length + ' measured cells, ' + median + ' m/s tracer median.')
 } finally {
-  await browser?.close()
-  server.kill()
-  lines.close()
-  await exit
+  try {
+    await browser?.close()
+  } finally {
+    server.kill()
+    lines.close()
+    await exit
+  }
 }
