@@ -8,6 +8,10 @@ build:
   jobs:
     post_install:
       - npm install --no-save --package-lock=false jsdoc@4.0.5
+    build:
+      html:
+        # sphinx-js requires serial reading.
+        - python -m sphinx -W -n -j 1 -b html -D "language=$READTHEDOCS_LANGUAGE" docs "$READTHEDOCS_OUTPUT/html"
 
 sphinx:
   configuration: docs/conf.py
