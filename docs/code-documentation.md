@@ -30,27 +30,11 @@ sequenceDiagram
 
 ## API reference
 
-The JavaScript reference reads JSDoc comments and the Python reference
-reads Python docstrings during each documentation build.
+The documentation build reads JSDoc comments from the browser app source
+to generate the JavaScript API reference.
 
 ```{toctree}
 :maxdepth: 1
 
 javascript-api
-python-api
 ```
-
-## Build the documentation
-
-Run these commands from the repository checkout with Python 3.12 and
-Node.js 24 available. A strict build fails on documentation warnings.
-
-```sh
-python -m pip install -r docs/requirements.txt
-npm install --no-save --package-lock=false jsdoc@4.0.5
-python -m sphinx -W -n -b html docs docs/_build/html
-```
-
-On Windows, sphinx-js invokes Node through a `node.cmd` launcher. If
-your Node installation only provides `node.exe`, place a `node.cmd`
-file containing `@node.exe %*` in a directory on your `PATH`.

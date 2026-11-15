@@ -1,18 +1,21 @@
 # Browser app
 
-Start the app as described in [Installation](installation.md). Video
-analysis runs in the browser. The local server reads GeoPackage point layers.
+For a first run with supplied data, open the [Isar River showcase](isar.md).
+For your own footage, start pXv as described in [Installation](installation.md)
+and use **Import**.
 
 ## Import and analyze
 
 1. Select **Import** and choose an MP4, MOV, or M4V containing video your
    browser can decode as H.264 or H.265.
-2. Select the video reference. A DJI SRT supplies the camera height above
-   takeoff, gimbal attitude, and GPS position. Enter the signed difference
-   between takeoff elevation and water elevation in **UAS takeoff above
-   water surface (m)**. If you lack an SRT, enter ground control points
-   to locate the image on a map, enter a known metric scale for a flat
-   image, or work in pixels per second.
+2. Set the video scale and location. A DJI SRT is a text file recorded
+   alongside some drone videos. pXv uses it for the camera height above
+   takeoff, camera angle, and GPS position. Review **UAS takeoff above
+   water surface (m)**, which is the height of the launch point relative
+   to the water. Use a negative value if the launch point is below the
+   water level. Without an SRT, use ground control points (visible
+   locations with known map coordinates), enter a known metres-per-pixel
+   scale, or work in pixels per second.
 3. Optionally add a velocity survey as a GeoPackage point layer, GeoJSON,
    CSV, TSV, or pXv survey JSON. Map the columns for position and either
    speed or two horizontal velocity components. Use metres per second for
@@ -25,7 +28,17 @@ analysis runs in the browser. The local server reads GeoPackage point layers.
 5. Set the frame range and the method. Draw water and static bank masks if
    needed, then select **Run analysis**.
 
+```{figure} _static/import-wizard.webp
+:alt: The scale and location step of the Import wizard with the DJI SRT file picker and manual scale choices.
+:width: 100%
+
+The **Set video scale and location** step of **Import**.
+```
+
 ## Compare with a survey
+
+If you skip the survey file, pXv displays a warning that it cannot
+validate or calibrate the video velocities against field measurements.
 
 Select **Reference only**, **Validation**, or **Calibration and validation**.
 The app matches nearby cells to survey positions within the chosen radius.

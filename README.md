@@ -4,46 +4,46 @@
 
 ## Purpose
 
-pXv measures water-surface velocity from downward-looking drone and laboratory
-video using particle tracking velocimetry (PTV) and particle image velocimetry
-(PIV). The browser app handles georeferencing, survey comparison, and figure
-and table export. The Python package also provides a CLI, a desktop GUI,
-and GIS exports.
+pXv estimates water-surface velocity from video filmed above a river or
+laboratory flume. Particle tracking velocimetry (PTV) follows individual
+tracers, and particle image velocimetry (PIV) follows patterns across the
+image. The browser app maps the results, compares them with field
+measurements where available, and exports figures and tables.
 
 ## Installation
 
-Clone the repository and start the browser app with Node.js 24 or later.
+Install [Node.js 24 or later](https://nodejs.org/en/download). On GitHub,
+select **Code** → **Download ZIP** and extract it. Open a terminal in the
+extracted folder that contains `web` and run the following command.
 
 ```sh
-git clone https://github.com/sschwindt/pXv.git
-cd pXv
 node web/server.mjs
 ```
 
-Open [the local app](http://127.0.0.1:8040/) in Chrome or Edge.
-See [Installation](https://pxv.readthedocs.io/en/latest/installation.html)
-for Python setup.
+Keep the terminal open and open [the local app](http://127.0.0.1:8040/) in
+Chrome or Edge. See the [Installation guide](https://pxv.readthedocs.io/en/latest/installation.html)
+for help opening a terminal on Windows, macOS, or Linux.
 
 ## Usage
 
-Select **Load Isar example**, then **Run analysis**. A fresh checkout includes
-a 30-frame, 2.63 MB seeded clip, matching DJI captions, and the survey. The
-app uses the full clip when it is present. Set `PXV_ISAR_FIXTURE=1` to
-select the short clip explicitly.
+Select **Load Isar example**, then **Run analysis**. The download includes
+a short drone clip, its DJI captions, and the field survey. The
+[Isar River showcase](https://pxv.readthedocs.io/en/latest/isar.html)
+shows what to expect and explains the results.
 
 Use **Import** to analyze your own footage. **Save project** and **Load
 project** preserve settings in a `.pxv` file. **Export result graph**
 downloads a WebP or JPEG with a speed legend, scale bar, and a north arrow
 when the footage is georeferenced. CSV and XLSX contain the numeric results.
 
-The [Usage guide](https://pxv.readthedocs.io/en/latest/usage.html) covers the
-browser app, survey comparison, Isar example, and Python workflow.
+The [Usage guide](https://pxv.readthedocs.io/en/latest/usage.html) covers
+import, survey comparison, filters, and exports.
 
 ## Code Documentation
 
 The [Code Documentation](https://pxv.readthedocs.io/en/latest/code-documentation.html)
-includes a UML sequence diagram and API references generated from JavaScript
-JSDoc and Python docstrings. Run the JavaScript unit tests with
+includes a UML sequence diagram and a JavaScript API reference generated from
+JSDoc comments. Run the JavaScript unit tests with
 `node --test "web/*.test.mjs"`. GitHub Actions also processes the bundled Isar
 example in Chrome and builds the documentation.
 
